@@ -1,0 +1,338 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TECHNICIAN
+  CLIENT
+}
+
+enum ProjectStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id               Int            @id @default(autoincrement())
+  name             String
+  email            String         @unique
+  password         String
+  role             Role           @default(CLIENT)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  projects         Project[]      @relation("AssignedProjects")
+  refreshTokens    RefreshToken[]
+  sentMessages     Message[]      @relation("SentMessages")
+  receivedMessages Message[]      @relation("ReceivedMessages")
+  notifications    Notification[]
+  todos            Todo[]
+  tasksAssigned    Task[]         @relation("UserTasks")
+  Transaction      Transaction[]
+  budgetHistory    BudgetHistory[]
+}
+
+model Service {
+  id          Int       @id @default(autoincrement())
+  name        String
+  categoryId  Int?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  description String?
+  price       Float
+  createdAt   DateTime  @default(now())
+
+  projects     Project[]
+  invoiceItems InvoiceItem[]
+}
+
+model Project {
+  id           Int           @id @default(autoincrement())
+  title        String
+  clientName   String
+  serviceId    Int?
+  budgetId     Int?
+  assignedToId Int
+  status       ProjectStatus @default(PENDING)
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime      @default(now())
+
+  service    Service?  @relation(fields: [serviceId], references: [id])
+  budget     Budget?   @relation(fields: [budgetId], references: [id])
+  assignedTo User      @relation("AssignedProjects", fields: [assignedToId], references: [id])
+  expenses   Expense[]
+  invoices   Invoice[]
+  Task       Task[]
+  Revenue    Revenue[]
+  Profit     Profit[]
+}
+
+model Expense {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  amount    Float
+  note      String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+}
+
+model Product {
+  id           Int       @id @default(autoincrement())
+  name         String
+  categoryId   Int?
+  category     Category? @relation(fields: [categoryId], references: [id])
+  description  String?
+  buyingPrice  Float
+  sellingPrice Float
+  stock        Int       @default(0)
+  image        String?   // URL or path to product image
+  sku          String?   @unique // Stock Keeping Unit
+  barcode      String?   @unique // Product barcode
+  weight       Float?    // Product weight in kg
+  dimensions   String?   // Product dimensions (e.g., "10x5x2 cm")
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  invoiceItems InvoiceItem[]
+  transactions InventoryTransaction[]
+  budgetId     Int?
+  budget       Budget? @relation(fields: [budgetId], references: [id])
+}
+
+model Invoice {
+  id         Int      @id @default(autoincrement())
+  clientName String
+  projectId  Int?
+  total      Float
+  issuedAt   DateTime @default(now())
+
+  project Project?      @relation(fields: [projectId], references: [id])
+  items   InvoiceItem[]
+  Payment Payment[]
+  Revenue Revenue[]
+}
+
+model InvoiceItem {
+  id        Int   @id @default(autoincrement())
+  invoiceId Int
+  productId Int?
+  serviceId Int?
+  quantity  Int   @default(1)
+  unitPrice Float
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+  service Service? @relation(fields: [serviceId], references: [id])
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum StockTransactionType {
+  INCOMING
+  OUTGOING
+  ADJUSTMENT
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  products Product[]
+  services Service[]
+}
+
+model PaymentMethod {
+  id        Int      @id @default(autoincrement())
+  name      String
+  details   String?
+  createdAt DateTime @default(now())
+
+  payments Payment[]
+}
+
+model Payment {
+  id        Int           @id @default(autoincrement())
+  invoiceId Int
+  methodId  Int
+  amount    Float
+  status    PaymentStatus @default(PENDING)
+  paidAt    DateTime      @default(now())
+
+  invoice     Invoice       @relation(fields: [invoiceId], references: [id])
+  method      PaymentMethod @relation(fields: [methodId], references: [id])
+  Transaction Transaction[]
+  Receipt     Receipt[]
+}
+
+model Task {
+  id           Int        @id @default(autoincrement())
+  projectId    Int
+  assignedToId Int?
+  title        String
+  description  String?
+  status       TaskStatus @default(TODO)
+  dueDate      DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  project    Project @relation(fields: [projectId], references: [id])
+  assignedTo User?   @relation("UserTasks", fields: [assignedToId], references: [id])
+}
+
+model Todo {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  title       String
+  description String?
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Budget {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  category    String?
+  description String?
+  amount      Float
+  createdAt   DateTime @default(now())
+
+  products Product[]
+  history  BudgetHistory[]
+  projects Project[]
+}
+
+model Revenue {
+  id         Int      @id @default(autoincrement())
+  projectId  Int?
+  invoiceId  Int?
+  amount     Float
+  receivedAt DateTime @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id])
+  invoice Invoice? @relation(fields: [invoiceId], references: [id])
+}
+
+model Profit {
+  id           Int      @id @default(autoincrement())
+  projectId    Int?
+  amount       Float
+  calculatedAt DateTime @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id])
+}
+
+model InventoryTransaction {
+  id              Int                  @id @default(autoincrement())
+  productId       Int
+  quantity        Int
+  transactionType StockTransactionType
+  note            String?
+  createdAt       DateTime             @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ALERT
+}
+
+model Transaction {
+  id          Int             @id @default(autoincrement())
+  userId      Int?
+  paymentId   Int?
+  amount      Float
+  type        TransactionType
+  description String?
+  createdAt   DateTime        @default(now())
+
+  user    User?    @relation(fields: [userId], references: [id])
+  payment Payment? @relation(fields: [paymentId], references: [id])
+}
+
+model Receipt {
+  id        Int      @id @default(autoincrement())
+  paymentId Int
+  number    String   @unique
+  issuedAt  DateTime @default(now())
+  note      String?
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+}
+
+model Message {
+  id         Int      @id @default(autoincrement())
+  senderId   Int
+  receiverId Int
+  content    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  content   String
+  type      NotificationType @default(INFO)
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model BudgetHistory {
+  id          Int      @id @default(autoincrement())
+  budgetId    Int
+  action      String   // "CREATED", "UPDATED", "DELETED", "AMOUNT_CHANGED", "CATEGORY_CHANGED"
+  oldValue    String?  // JSON string of old values
+  newValue    String?  // JSON string of new values
+  changedBy   Int      // User ID who made the change
+  createdAt   DateTime @default(now())
+
+  budget      Budget   @relation(fields: [budgetId], references: [id])
+  user        User     @relation(fields: [changedBy], references: [id])
+}
