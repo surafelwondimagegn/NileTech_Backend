@@ -135,11 +135,14 @@ export class ServiceService {
           },
           projects: {
             select: {
-              id: true,
-              title: true,
-              clientName: true,
-              status: true,
-              createdAt: true,
+              project: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  createdAt: true,
+                },
+              },
             },
             orderBy: {
               createdAt: 'desc',

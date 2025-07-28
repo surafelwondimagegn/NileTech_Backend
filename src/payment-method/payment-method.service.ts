@@ -240,7 +240,7 @@ export class PaymentMethodService {
       },
     ];
 
-    const createdMethods = [];
+    const createdMethods: any[] = [];
 
     for (const method of defaultMethods) {
       try {

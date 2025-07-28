@@ -44,6 +44,15 @@ export class CreateProductDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({
+    description: 'Product SKU (Stock Keeping Unit)',
+    example: 'DELL-XPS-13-2023',
+    maxLength: 50,
+  })
+  @IsOptional()
+  @IsString()
+  sku?: string;
+
   @ApiProperty({
     description: 'Buying price',
     example: 8,

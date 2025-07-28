@@ -21,7 +21,13 @@ export class NotificationGateway {
     @MessageBody() dto: SendNotificationDto,
     @ConnectedSocket() client: Socket,
   ) {
-    const notification = await this.notificationService.create(dto);
+    // Add userId to the DTO for the notification service
+    const createNotificationDto = {
+      userId: dto.receiverId,
+      content: dto.content,
+      type: dto.type,
+    };
+    const notification = await this.notificationService.create(createNotificationDto);
 
     // Emit to specific user or room
     this.server

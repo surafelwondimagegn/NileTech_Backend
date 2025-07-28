@@ -186,7 +186,7 @@ export class ProductService {
         // Unique constraint violation
         if (error.meta?.target?.includes('sku')) {
           throw new ConflictException(
-            `Product with SKU "${createProductDto.sku}" already exists`,
+            `Product with SKU "${createProductDto.sku || 'undefined'}" already exists`,
           );
         }
         throw new ConflictException(
@@ -423,7 +423,7 @@ export class ProductService {
         // Unique constraint violation
         if (error.meta?.target?.includes('sku')) {
           throw new ConflictException(
-            `Product with SKU "${updateProductDto.sku}" already exists`,
+            `Product with SKU "${updateProductDto.sku || 'undefined'}" already exists`,
           );
         }
         throw new ConflictException(

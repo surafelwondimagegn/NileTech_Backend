@@ -93,7 +93,7 @@ export class SellService {
 
   private async _sellProductCore(
     dto: CreateSellProductDto | SellProductItemDto,
-    prismaOverride?: PrismaService,
+    prismaOverride?: any,
   ): Promise<SellResponseDto> {
     const prisma = prismaOverride || this.prisma;
     const {
@@ -226,7 +226,7 @@ export class SellService {
       totalRevenue,
       totalProfit: profitPerUnit,
       taxAmount,
-      taxId: usedTaxId,
+      taxId: usedTaxId || undefined,
       customerName,
       customerEmail,
       customerPhone,
@@ -237,7 +237,7 @@ export class SellService {
 
   private async _sellServiceCore(
     dto: SellServiceItemDto,
-    prismaOverride?: PrismaService,
+    prismaOverride?: any,
   ): Promise<SellResponseDto> {
     const prisma = prismaOverride || this.prisma;
     const {
@@ -360,7 +360,7 @@ export class SellService {
       totalRevenue,
       totalProfit: profitPerUnit,
       taxAmount,
-      taxId: usedTaxId,
+      taxId: usedTaxId || undefined,
       customerName,
       customerEmail,
       customerPhone,

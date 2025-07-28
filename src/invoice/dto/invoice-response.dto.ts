@@ -83,6 +83,7 @@ export class InvoiceItemResponseDto {
   @ApiPropertyOptional({
     description: 'Product details',
     type: 'object',
+    additionalProperties: false,
     example: {
       id: 1,
       name: 'Premium Product',
@@ -102,6 +103,7 @@ export class InvoiceItemResponseDto {
   @ApiPropertyOptional({
     description: 'Service details',
     type: 'object',
+    additionalProperties: false,
     example: {
       id: 2,
       name: 'Professional Service',
@@ -171,6 +173,7 @@ export class InvoiceCalculationDto {
   @ApiProperty({
     description: 'Breakdown by item type',
     type: 'object',
+    additionalProperties: false,
     example: {
       products: {
         count: 2,
@@ -240,6 +243,7 @@ export class InvoiceResponseDto {
   @ApiPropertyOptional({
     description: 'Project details',
     type: 'object',
+    additionalProperties: false,
     example: {
       id: 1,
       title: 'Website Redesign for Acme Corp',
@@ -463,6 +467,7 @@ export class InvoiceStatsDto {
   @ApiProperty({
     description: 'Status breakdown',
     type: 'object',
+    additionalProperties: false,
     example: {
       DRAFT: 10,
       SENT: 25,

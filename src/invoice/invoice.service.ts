@@ -30,7 +30,7 @@ export class InvoiceService {
   async create(
     createInvoiceDto: CreateInvoiceDto,
   ): Promise<InvoiceResponseDto> {
-    const { items, ...invoiceData } = createInvoiceDto;
+    let { items, ...invoiceData } = createInvoiceDto;
 
     // Validate items array - allow empty invoices
     if (!items) {
@@ -88,8 +88,8 @@ export class InvoiceService {
     if (items.length > 0) {
       for (const item of items) {
         let unitPrice = item.unitPrice;
-        let product = null;
-        let service = null;
+        let product: any = null;
+        let service: any = null;
         if (item.productId) {
           product = await this.prisma.product.findUnique({
             where: { id: item.productId },
@@ -330,10 +330,10 @@ export class InvoiceService {
       id: created.id,
       invoiceNumber: created.invoiceNumber,
       clientName: created.clientName,
-      clientEmail: created.clientEmail,
-      clientPhone: created.clientPhone,
-      clientAddress: created.clientAddress,
-      projectId: created.projectId,
+      clientEmail: created.clientEmail || undefined,
+      clientPhone: created.clientPhone || undefined,
+      clientAddress: created.clientAddress || undefined,
+      projectId: created.projectId || undefined,
       project: created.project
         ? {
             id: created.project.id,
@@ -344,9 +344,9 @@ export class InvoiceService {
         : undefined,
       status: created.status as InvoiceStatus,
       paymentTerms: created.paymentTerms as PaymentTerms,
-      customPaymentDays: created.customPaymentDays,
+      customPaymentDays: created.customPaymentDays || undefined,
       issuedAt: created.issuedAt,
-      dueDate: created.dueDate,
+      dueDate: created.dueDate || undefined,
       calculations: {
         subtotal,
         totalDiscount: invoiceDiscount,
@@ -369,13 +369,13 @@ export class InvoiceService {
       },
       total: grandTotal,
       currency: created.currency,
-      purchaseOrderNumber: created.purchaseOrderNumber,
-      notes: created.notes,
-      termsAndConditions: created.termsAndConditions,
+      purchaseOrderNumber: created.purchaseOrderNumber || undefined,
+      notes: created.notes || undefined,
+      termsAndConditions: created.termsAndConditions || undefined,
       items: created.items.map((item) => ({
         id: item.id,
-        productId: item.productId,
-        serviceId: item.serviceId,
+        productId: item.productId || undefined,
+        serviceId: item.serviceId || undefined,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         discount: item.discount,
@@ -385,14 +385,14 @@ export class InvoiceService {
         totalAfterDiscount: item.totalAfterDiscount,
         taxAmount: item.taxAmount,
         total: item.total,
-        description: item.description,
+        description: item.description || undefined,
         product: item.product
           ? {
               id: item.product.id,
               name: item.product.name,
               sellingPrice: item.product.sellingPrice,
-              description: item.product.description,
-              sku: item.product.sku,
+              description: item.product.description || undefined,
+              sku: item.product.sku || undefined,
             }
           : undefined,
         service: item.service
@@ -400,8 +400,8 @@ export class InvoiceService {
               id: item.service.id,
               name: item.service.name,
               price: item.service.price,
-              description: item.service.description,
-              serviceCode: item.service.serviceCode,
+              description: item.service.description || undefined,
+              serviceCode: item.service.serviceCode || undefined,
             }
           : undefined,
       })),

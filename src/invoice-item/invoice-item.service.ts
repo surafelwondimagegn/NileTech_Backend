@@ -53,7 +53,21 @@ export class InvoiceItemService {
     }
 
     return this.prisma.invoiceItem.create({
-      data: createInvoiceItemDto,
+      data: {
+        invoiceId: createInvoiceItemDto.invoiceId,
+        productId: createInvoiceItemDto.productId,
+        serviceId: createInvoiceItemDto.serviceId,
+        quantity: createInvoiceItemDto.quantity,
+        unitPrice: createInvoiceItemDto.unitPrice,
+        discount: createInvoiceItemDto.discount,
+        discountPercentage: createInvoiceItemDto.discountPercentage,
+        taxRate: createInvoiceItemDto.taxRate,
+        subtotal: createInvoiceItemDto.subtotal,
+        totalAfterDiscount: createInvoiceItemDto.totalAfterDiscount,
+        taxAmount: createInvoiceItemDto.taxAmount,
+        total: createInvoiceItemDto.total,
+        description: createInvoiceItemDto.description,
+      },
       include: {
         invoice: {
           select: {
