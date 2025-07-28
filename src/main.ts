@@ -11,10 +11,20 @@ async function bootstrap() {
   // Security middleware
   app.use(helmet());
 
+  // Global request logging middleware
+  
+
   // CORS configuration
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:3001',
+      process.env.CORS_ORIGIN,
+    ].filter(Boolean),
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
 
   // Global validation pipe
@@ -29,47 +39,58 @@ async function bootstrap() {
   // Global prefix for all routes
   app.setGlobalPrefix('api/v1');
 
-  // Swagger documentation setup
+  // Swagger setup
   const config = new DocumentBuilder()
-    .setTitle(process.env.SWAGGER_TITLE || 'NileTech Backend API')
-    .setDescription(
-      process.env.SWAGGER_DESCRIPTION || 
-      'A comprehensive backend API for NileTech business management system with REST APIs and WebSocket support'
-    )
-    .setVersion(process.env.SWAGGER_VERSION || '1.0')
+    .setTitle('NileTech API')
+    .setDescription('API documentation for all routes in the NileTech system')
+    .setVersion('1.0')
     .addBearerAuth(
       {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        name: 'JWT',
+        name: 'Authorization',
         description: 'Enter JWT token',
         in: 'header',
       },
       'JWT-auth',
-    ) 
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  
-  // Custom Swagger UI options for better organization
   SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
-      tagsSorter: 'alpha', // Sort tags alphabetically
-      operationsSorter: 'alpha', // Sort operations alphabetically within each tag
-      docExpansion: 'list', // Show all endpoints expanded
-      filter: true, // Enable search/filter functionality
+      displayRequestDuration: true,
+      docExpansion: 'none',
+      filter: true,
       showRequestHeaders: true,
-      showCommonExtensions: true,
+      showResponseHeaders: true,
+      tryItOutEnabled: true,
+      defaultModelsExpandDepth: 1,
+      defaultModelExpandDepth: 1,
     },
     customSiteTitle: 'NileTech API Documentation',
     customCss: `
-      .swagger-ui .topbar { display: none }
-      .swagger-ui .info .title { font-size: 2.5em; margin: 20px 0; }
-      .swagger-ui .info .description { font-size: 1.2em; margin: 10px 0; }
-      .swagger-ui .opblock-tag { font-weight: bold; }
-      .swagger-ui .opblock-summary { font-weight: 500; }
+      .swagger-ui .auth-wrapper {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        background: white;
+        padding: 10px 0;
+        border-bottom: 1px solid #ccc;
+      }
+      .swagger-ui .authorization__btn {
+        background: #4CAF50;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .swagger-ui .authorization__btn:hover {
+        background: #45a049;
+      }
     `,
   });
 
@@ -82,50 +103,16 @@ async function bootstrap() {
 
   // Console output with server information
   console.log('\n🚀 NileTech Backend Server Started Successfully!');
-  console.log('=' .repeat(60));
+  console.log('='.repeat(60));
   console.log(`📡 Server URL: http://localhost:${port}`);
   console.log(`🔌 WebSocket Port: ${wsPort}`);
   console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔒 Security: Helmet enabled`);
-  console.log(`🌍 CORS: Enabled for ${process.env.CORS_ORIGIN || 'http://localhost:3000'}`);
-  console.log('=' .repeat(60));
-  
-  // API Endpoints summary (alphabetically ordered)
-  console.log('\n📋 Available API Endpoints (Alphabetically Ordered):');
-  console.log('├── Authentication: /api/v1/auth/*');
-  console.log('├── Budget History: /api/v1/budget-history/*');
-  console.log('├── Budgets: /api/v1/budgets/*');
-  console.log('├── Categories: /api/v1/categories/*');
-  console.log('├── Expenses: /api/v1/expenses/*');
-  console.log('├── Inventory Transactions: /api/v1/inventory-transactions/*');
-  console.log('├── Invoice Items: /api/v1/invoice-items/*');
-  console.log('├── Invoices: /api/v1/invoices/*');
-  console.log('├── Payments: /api/v1/payments/*');
-  console.log('├── Payment Methods: /api/v1/payment-methods/*');
-  console.log('├── Products: /api/v1/products/*');
-  console.log('├── Profits: /api/v1/profits/*');
-  console.log('├── Projects: /api/v1/projects/*');
-  console.log('├── Receipts: /api/v1/receipts/*');
-  console.log('├── Refresh Tokens: /api/v1/refresh-tokens/*');
-  console.log('├── Revenues: /api/v1/revenues/*');
-  console.log('├── Services: /api/v1/services/*');
-  console.log('├── Tasks: /api/v1/tasks/*');
-  console.log('├── Todos: /api/v1/todos/*');
-  console.log('├── Transactions: /api/v1/transactions/*');
-  console.log('└── Users: /api/v1/users/*');
-  
-  // WebSocket information
-  console.log('\n🔌 WebSocket Namespaces:');
-  console.log('├── Messages: /message');
-  console.log('└── Notifications: /notification');
-  
-  console.log('\n💡 Tips:');
-  console.log('• Use the Swagger docs to explore and test APIs');
-  console.log('• WebSocket connections require JWT authentication');
-  console.log('• All API endpoints are prefixed with /api/v1');
-  console.log('• Check .env file for configuration options');
-  console.log('• Endpoints are organized alphabetically in Swagger');
+  console.log(
+    `🌍 CORS: Enabled for http://localhost:3000, http://localhost:5173, http://localhost:3001`,
+  );
+  console.log('='.repeat(60));
   console.log('\n🎯 Server is ready to handle requests!\n');
 }
 

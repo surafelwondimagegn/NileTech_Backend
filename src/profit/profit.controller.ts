@@ -1,8 +1,29 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { ProfitService } from './profit.service';
 import { CreateProfitDto } from './dto/create-profit.dto';
 import { UpdateProfitDto } from './dto/update-profit.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@ApiTags('profit')
+@ApiBearerAuth('JWT-auth')
+@ApiSecurity('JWT-auth')
+@UseGuards(JwtAuthGuard)
 @Controller('profit')
 export class ProfitController {
   constructor(private readonly profitService: ProfitService) {}

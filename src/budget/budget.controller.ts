@@ -1,13 +1,31 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { BudgetService } from './budget.service';
 import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('budgets')
-// @ApiBearerAuth('JWT-auth')
-// @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
+@ApiSecurity('JWT-auth')
+@UseGuards(JwtAuthGuard)
 @Controller('budget')
 export class BudgetController {
   constructor(private readonly budgetService: BudgetService) {}
@@ -35,11 +53,11 @@ export class BudgetController {
   @ApiResponse({ status: 200, description: 'Name availability status' })
   async checkNameExists(@Param('name') name: string) {
     const exists = await this.budgetService.checkNameExists(name);
-    return { 
-      name, 
-      exists, 
+    return {
+      name,
+      exists,
       available: !exists,
-      message: exists ? 'Name already taken' : 'Name is available'
+      message: exists ? 'Name already taken' : 'Name is available',
     };
   }
 
@@ -57,7 +75,11 @@ export class BudgetController {
   @ApiParam({ name: 'id', description: 'Budget ID' })
   @ApiResponse({ status: 200, description: 'Budget updated successfully' })
   @ApiResponse({ status: 404, description: 'Budget not found' })
-  update(@Param('id') id: string, @Body() updateBudgetDto: UpdateBudgetDto, @Request() req) {
+  update(
+    @Param('id') id: string,
+    @Body() updateBudgetDto: UpdateBudgetDto,
+    @Request() req,
+  ) {
     // Temporarily use a default user ID since auth is commented out
     const userId = req.user?.userId || 1;
     return this.budgetService.update(+id, updateBudgetDto, userId);

@@ -1,26 +1,91 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateInventoryTransactionDto } from './dto/create-inventory-transaction.dto';
 import { UpdateInventoryTransactionDto } from './dto/update-inventory-transaction.dto';
 
 @Injectable()
 export class InventoryTransactionService {
-  create(createInventoryTransactionDto: CreateInventoryTransactionDto) {
-    return 'This action adds a new inventoryTransaction';
+  constructor(private prisma: PrismaService) {}
+
+  async create(createInventoryTransactionDto: CreateInventoryTransactionDto) {
+    return this.prisma.inventoryTransaction.create({
+      data: createInventoryTransactionDto,
+      include: {
+        product: true,
+      },
+    });
   }
 
-  findAll() {
-    return `This action returns all inventoryTransaction`;
+  async findAll() {
+    return this.prisma.inventoryTransaction.findMany({
+      include: {
+        product: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} inventoryTransaction`;
+  async findOne(id: number) {
+    return this.prisma.inventoryTransaction.findUnique({
+      where: { id },
+      include: {
+        product: true,
+      },
+    });
   }
 
-  update(id: number, updateInventoryTransactionDto: UpdateInventoryTransactionDto) {
-    return `This action updates a #${id} inventoryTransaction`;
+  async update(
+    id: number,
+    updateInventoryTransactionDto: UpdateInventoryTransactionDto,
+  ) {
+    return this.prisma.inventoryTransaction.update({
+      where: { id },
+      data: updateInventoryTransactionDto,
+      include: {
+        product: true,
+      },
+    });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} inventoryTransaction`;
+  async remove(id: number) {
+    return this.prisma.inventoryTransaction.delete({
+      where: { id },
+    });
+  }
+
+  async getInventoryTransactionStats() {
+    const [totalTransactions, totalIncoming, totalOutgoing, transactionsByProduct] = await Promise.all([
+      this.prisma.inventoryTransaction.count(),
+      this.prisma.inventoryTransaction.count({
+        where: {
+          transactionType: 'INCOMING',
+        },
+      }),
+      this.prisma.inventoryTransaction.count({
+        where: {
+          transactionType: 'OUTGOING',
+        },
+      }),
+      this.prisma.inventoryTransaction.groupBy({
+        by: ['productId'],
+        _sum: {
+          quantity: true,
+        },
+        _count: true,
+      }),
+    ]);
+
+    return {
+      totalTransactions,
+      totalIncoming,
+      totalOutgoing,
+      transactionsByProduct: transactionsByProduct.map(item => ({
+        productId: item.productId,
+        totalQuantity: item._sum.quantity || 0,
+        transactionCount: item._count,
+      })),
+    };
   }
 }

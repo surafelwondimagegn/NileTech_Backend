@@ -1,10 +1,30 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
+import { 
+  ApiTags, 
+  ApiOperation, 
+  ApiResponse, 
+  ApiParam,
+  ApiBearerAuth,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('categories')
+@ApiBearerAuth('JWT-auth')
+@ApiSecurity('JWT-auth')
+@UseGuards(JwtAuthGuard)
 @Controller('category')
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
@@ -31,11 +51,11 @@ export class CategoryController {
   @ApiResponse({ status: 200, description: 'Name availability status' })
   async checkNameExists(@Param('name') name: string) {
     const exists = await this.categoryService.checkNameExists(name);
-    return { 
-      name, 
-      exists, 
+    return {
+      name,
+      exists,
       available: !exists,
-      message: exists ? 'Name already taken' : 'Name is available'
+      message: exists ? 'Name already taken' : 'Name is available',
     };
   }
 
@@ -54,7 +74,10 @@ export class CategoryController {
   @ApiResponse({ status: 200, description: 'Category updated successfully' })
   @ApiResponse({ status: 404, description: 'Category not found' })
   @ApiResponse({ status: 409, description: 'Category name already exists' })
-  update(@Param('id') id: string, @Body() updateCategoryDto: UpdateCategoryDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateCategoryDto: UpdateCategoryDto,
+  ) {
     return this.categoryService.update(+id, updateCategoryDto);
   }
 
@@ -63,7 +86,11 @@ export class CategoryController {
   @ApiParam({ name: 'id', description: 'Category ID' })
   @ApiResponse({ status: 200, description: 'Category deleted successfully' })
   @ApiResponse({ status: 404, description: 'Category not found' })
-  @ApiResponse({ status: 409, description: 'Cannot delete category as it is referenced by products or services' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Cannot delete category as it is referenced by products or services',
+  })
   remove(@Param('id') id: string) {
     return this.categoryService.remove(+id);
   }

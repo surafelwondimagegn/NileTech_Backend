@@ -1,8 +1,29 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { RefreshTokenService } from './refresh-token.service';
 import { CreateRefreshTokenDto } from './dto/create-refresh-token.dto';
 import { UpdateRefreshTokenDto } from './dto/update-refresh-token.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@ApiTags('refresh-token')
+@ApiBearerAuth('JWT-auth')
+@ApiSecurity('JWT-auth')
+@UseGuards(JwtAuthGuard)
 @Controller('refresh-token')
 export class RefreshTokenController {
   constructor(private readonly refreshTokenService: RefreshTokenService) {}
@@ -23,7 +44,10 @@ export class RefreshTokenController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateRefreshTokenDto: UpdateRefreshTokenDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateRefreshTokenDto: UpdateRefreshTokenDto,
+  ) {
     return this.refreshTokenService.update(+id, updateRefreshTokenDto);
   }
 

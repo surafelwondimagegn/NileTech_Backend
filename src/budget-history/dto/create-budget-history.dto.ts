@@ -7,28 +7,34 @@ export class CreateBudgetHistoryDto {
   @IsNotEmpty()
   budgetId: number;
 
-  @ApiProperty({ 
-    description: 'Action performed on the budget', 
+  @ApiProperty({
+    description: 'Action performed on the budget',
     example: 'CREATED',
-    enum: ['CREATED', 'UPDATED', 'DELETED', 'AMOUNT_CHANGED', 'CATEGORY_CHANGED']
+    enum: [
+      'CREATED',
+      'UPDATED',
+      'DELETED',
+      'AMOUNT_CHANGED',
+      'CATEGORY_CHANGED',
+    ],
   })
   @IsString()
   @IsNotEmpty()
   action: string;
 
-  @ApiProperty({ 
-    description: 'Previous values (JSON string)', 
+  @ApiProperty({
+    description: 'Previous values (JSON string)',
     example: '{"amount": 1000, "category": "Materials"}',
-    required: false 
+    required: false,
   })
   @IsString()
   @IsOptional()
   oldValue?: string;
 
-  @ApiProperty({ 
-    description: 'New values (JSON string)', 
+  @ApiProperty({
+    description: 'New values (JSON string)',
     example: '{"amount": 1500, "category": "Materials"}',
-    required: false 
+    required: false,
   })
   @IsString()
   @IsOptional()

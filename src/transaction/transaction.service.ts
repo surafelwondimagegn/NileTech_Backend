@@ -1,26 +1,98 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 
 @Injectable()
 export class TransactionService {
-  create(createTransactionDto: CreateTransactionDto) {
-    return 'This action adds a new transaction';
+  constructor(private prisma: PrismaService) {}
+
+  async create(createTransactionDto: CreateTransactionDto) {
+    return this.prisma.transaction.create({
+      data: createTransactionDto,
+      include: {
+        user: true,
+        payment: true,
+      },
+    });
   }
 
-  findAll() {
-    return `This action returns all transaction`;
+  async findAll() {
+    return this.prisma.transaction.findMany({
+      include: {
+        user: true,
+        payment: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} transaction`;
+  async findOne(id: number) {
+    return this.prisma.transaction.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        payment: true,
+      },
+    });
   }
 
-  update(id: number, updateTransactionDto: UpdateTransactionDto) {
-    return `This action updates a #${id} transaction`;
+  async update(id: number, updateTransactionDto: UpdateTransactionDto) {
+    return this.prisma.transaction.update({
+      where: { id },
+      data: updateTransactionDto,
+      include: {
+        user: true,
+        payment: true,
+      },
+    });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} transaction`;
+  async remove(id: number) {
+    return this.prisma.transaction.delete({
+      where: { id },
+    });
+  }
+
+  async getTransactionStats() {
+    const [totalTransactions, totalAmount, transactionsByType, transactionsByUser] = await Promise.all([
+      this.prisma.transaction.count(),
+      this.prisma.transaction.aggregate({
+        _sum: {
+          amount: true,
+        },
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        _sum: {
+          amount: true,
+        },
+        _count: true,
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['userId'],
+        _sum: {
+          amount: true,
+        },
+        _count: true,
+      }),
+    ]);
+
+    return {
+      totalTransactions,
+      totalAmount: totalAmount._sum.amount || 0,
+      transactionsByType: transactionsByType.map(item => ({
+        type: item.type,
+        count: item._count,
+        amount: item._sum.amount || 0,
+      })),
+      transactionsByUser: transactionsByUser.map(item => ({
+        userId: item.userId,
+        count: item._count,
+        amount: item._sum.amount || 0,
+      })),
+    };
   }
 }

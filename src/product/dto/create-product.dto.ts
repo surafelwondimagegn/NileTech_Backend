@@ -1,134 +1,219 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNotEmpty, IsNumber, IsPositive, IsBoolean, IsUrl, MaxLength, Min, Max } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  Min,
+  Max,
+  IsBoolean,
+  IsEnum,
+} from 'class-validator';
+
+export enum ProductQuality {
+  BRAND_NEW = 'BRAND_NEW',
+  SECOND_HAND = 'SECOND_HAND',
+  REFURBISHED = 'REFURBISHED',
+  USED = 'USED',
+}
 
 export class CreateProductDto {
-  @ApiProperty({ 
-    description: 'Product name', 
+  @ApiProperty({
+    description: 'Product name',
     example: 'Laptop Dell XPS 13',
-    required: true 
+    minLength: 2,
+    maxLength: 100,
   })
   @IsString()
-  @IsNotEmpty()
-  @MaxLength(200)
   name: string;
 
-  @ApiProperty({ 
-    description: 'Category ID', 
+  @ApiPropertyOptional({
+    description: 'Category ID',
     example: 1,
-    required: false 
   })
-  @IsNumber()
   @IsOptional()
+  @IsNumber()
   categoryId?: number;
 
-  @ApiProperty({ 
-    description: 'Product description', 
+  @ApiPropertyOptional({
+    description: 'Product description',
     example: 'High-performance laptop with 16GB RAM and 512GB SSD',
-    required: false 
+    maxLength: 500,
   })
-  @IsString()
   @IsOptional()
-  @MaxLength(1000)
+  @IsString()
   description?: string;
 
-  @ApiProperty({ 
-    description: 'Buying price (cost price)', 
-    example: 800.00,
+  @ApiProperty({
+    description: 'Buying price',
+    example: 8,
     minimum: 0,
-    required: true 
   })
   @IsNumber()
   @IsPositive()
-  @Min(0)
   buyingPrice: number;
 
-  @ApiProperty({ 
-    description: 'Selling price (retail price)', 
-    example: 1200.00,
+  @ApiProperty({
+    description: 'Selling price',
+    example: 12,
     minimum: 0,
-    required: true 
   })
   @IsNumber()
   @IsPositive()
-  @Min(0)
   sellingPrice: number;
 
-  @ApiProperty({ 
-    description: 'Initial stock quantity', 
+  @ApiProperty({
+    description: 'Stock quantity',
     example: 10,
     minimum: 0,
-    required: false 
   })
   @IsNumber()
-  @IsOptional()
   @Min(0)
-  stock?: number;
+  stock: number;
 
-  @ApiProperty({ 
-    description: 'Product image URL', 
+  @ApiPropertyOptional({
+    description: 'Image URL',
     example: 'https://example.com/images/laptop.jpg',
-    required: false 
   })
-  @IsUrl()
   @IsOptional()
+  @IsString()
   image?: string;
 
-  @ApiProperty({ 
-    description: 'Stock Keeping Unit (SKU)', 
-    example: 'LAP-DELL-XPS-001',
-    required: false 
-  })
-  @IsString()
-  @IsOptional()
-  @MaxLength(50)
-  sku?: string;
-
-  @ApiProperty({ 
-    description: 'Product barcode', 
-    example: '1234567890123',
-    required: false 
-  })
-  @IsString()
-  @IsOptional()
-  @MaxLength(50)
-  barcode?: string;
-
-  @ApiProperty({ 
-    description: 'Product weight in kg', 
+  @ApiPropertyOptional({
+    description: 'Product weight in kg',
     example: 1.5,
-    minimum: 0,
-    required: false 
   })
-  @IsNumber()
   @IsOptional()
+  @IsNumber()
   @Min(0)
   weight?: number;
 
-  @ApiProperty({ 
-    description: 'Product dimensions', 
-    example: '30x20x2 cm',
-    required: false 
+  @ApiPropertyOptional({
+    description: 'Product brand name',
+    example: 'Dell',
+    maxLength: 50,
   })
+  @IsOptional()
   @IsString()
-  @IsOptional()
-  @MaxLength(100)
-  dimensions?: string;
+  brand?: string;
 
-  @ApiProperty({ 
-    description: 'Budget ID to deduct buying price from', 
-    example: 1,
-    required: false 
+  @ApiPropertyOptional({
+    description: 'Product model number',
+    example: 'XPS 13 9310',
+    maxLength: 50,
   })
-  @IsNumber()
   @IsOptional()
+  @IsString()
+  model?: string;
+
+  @ApiPropertyOptional({
+    description: 'Product quality',
+    example: ProductQuality.BRAND_NEW,
+    enum: ProductQuality,
+    default: ProductQuality.BRAND_NEW,
+  })
+  @IsOptional()
+  @IsEnum(ProductQuality)
+  quality?: ProductQuality;
+
+  @ApiPropertyOptional({
+    description: 'Product condition description',
+    example: 'Excellent condition, barely used',
+    maxLength: 200,
+  })
+  @IsOptional()
+  @IsString()
+  condition?: string;
+
+  @ApiPropertyOptional({
+    description: 'Warranty period in days',
+    example: 365,
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  warranty?: number;
+
+  @ApiPropertyOptional({
+    description: 'Supplier or manufacturer name',
+    example: 'Dell Technologies',
+    maxLength: 100,
+  })
+  @IsOptional()
+  @IsString()
+  supplier?: string;
+
+  @ApiPropertyOptional({
+    description: 'Supplier contact information',
+    example: 'support@dell.com, +1-800-999-3355',
+    maxLength: 200,
+  })
+  @IsOptional()
+  @IsString()
+  supplierContact?: string;
+
+  @ApiPropertyOptional({
+    description: 'Minimum stock level for alerts',
+    example: 5,
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minStockLevel?: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum stock level',
+    example: 100,
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxStockLevel?: number;
+
+  @ApiPropertyOptional({
+    description: 'Storage location',
+    example: 'Warehouse A, Shelf B3',
+    maxLength: 100,
+  })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({
+    description: 'Comma-separated tags for categorization',
+    example: 'laptop, premium, business, portable',
+    maxLength: 200,
+  })
+  @IsOptional()
+  @IsString()
+  tags?: string;
+
+  @ApiPropertyOptional({
+    description: 'Budget ID',
+    example: 1,
+  })
+  @IsOptional()
+  @IsNumber()
   budgetId?: number;
 
-  @ApiProperty({ 
-    description: 'Product active status', 
-    example: true,
-    required: false 
+  @ApiPropertyOptional({
+    description:
+      'Tax ID for this product (optional - uses default tax if not provided)',
+    example: 1,
   })
-  @IsBoolean()
   @IsOptional()
+  @IsNumber()
+  taxId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Is the product active?',
+    example: true,
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
