@@ -49,6 +49,7 @@ model User {
   projectUpdatesBy          Project[]        @relation("ProjectUpdates")
   projectServiceAssignments ProjectService[] @relation("ProjectServiceAssignments")
   projectTimeEntries        ProjectTimeEntry[]
+  employee                  Employee?
 }
 
 model Profile {
@@ -131,6 +132,7 @@ model Service {
   taxId        Int?
   tax          Tax?                   @relation(fields: [taxId], references: [id])
   soldServices SoldService[]
+  proformaItems ProformaItem[]
 }
 
 model Project {
@@ -284,6 +286,7 @@ model Product {
   budget       Budget?                @relation(fields: [budgetId], references: [id])
   taxId        Int?
   tax          Tax?                   @relation(fields: [taxId], references: [id])
+  proformaItems ProformaItem[]
 }
 
 model Invoice {
@@ -738,4 +741,151 @@ model SoldService {
   taxId   Int?
   tax     Tax?      @relation(fields: [taxId], references: [id])
   taxAmount Float   @default(0) // Tax amount collected on this sale
+}
+
+model Company {
+  id                 Int      @id @default(autoincrement())
+  name               String
+  registrationNumber String?  @unique
+  taxNumber          String?  @unique
+  email              String?
+  phone              String?
+  address            String?  @db.Text
+  city               String?
+  state              String?
+  country            String?
+  postalCode         String?
+  website            String?
+  description        String?  @db.Text
+  logo               String?
+  currency           String?  @default("USD")
+  timezone           String?  @default("UTC")
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  employees          Employee[]
+  payrolls           Payroll[]
+  proformas          Proforma[]
+}
+
+model Employee {
+  id             Int       @id @default(autoincrement())
+  companyId      Int
+  userId         Int?      @unique // Link to User table for authentication
+  employeeId     String    @unique // Company-specific employee ID
+  firstName      String
+  lastName       String
+  email          String    @unique
+  phone          String?
+  position       String
+  department     String?
+  hireDate       DateTime
+  salary         Float
+  hourlyRate     Float?
+  employmentType String    @default("FULL_TIME") // FULL_TIME, PART_TIME, CONTRACT, INTERN
+  status         String    @default("ACTIVE") // ACTIVE, INACTIVE, TERMINATED
+  address        String?   @db.Text
+  city           String?
+  state          String?
+  country        String?
+  postalCode     String?
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+  bankAccountNumber        String?
+  bankName                 String?
+  bankRoutingNumber        String?
+  taxId                    String? // Employee tax ID
+  socialSecurityNumber     String? // SSN or equivalent
+  dateOfBirth              DateTime?
+  gender                   String?
+  maritalStatus            String?
+  notes                    String?  @db.Text
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  company   Company   @relation(fields: [companyId], references: [id])
+  user      User?     @relation(fields: [userId], references: [id])
+  payrolls  Payroll[]
+}
+
+model Payroll {
+  id                Int      @id @default(autoincrement())
+  companyId         Int
+  employeeId        Int
+  payPeriodStart    DateTime
+  payPeriodEnd      DateTime
+  payDate           DateTime
+  grossPay          Float
+  netPay            Float
+  regularHours      Float    @default(0)
+  overtimeHours     Float    @default(0)
+  regularRate       Float
+  overtimeRate      Float?
+  totalDeductions   Float    @default(0)
+  taxDeductions     Float    @default(0)
+  insuranceDeductions Float  @default(0)
+  retirementDeductions Float @default(0)
+  otherDeductions   Float    @default(0)
+  bonuses           Float    @default(0)
+  commissions       Float    @default(0)
+  reimbursements    Float    @default(0)
+  status            String   @default("DRAFT") // DRAFT, APPROVED, PAID, CANCELLED
+  notes             String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+}
+
+model Proforma {
+  id                    Int      @id @default(autoincrement())
+  companyId             Int
+  proformaNumber        String   @unique
+  clientName            String
+  clientEmail           String?
+  clientPhone           String?
+  clientAddress         String?  @db.Text
+  validUntil            DateTime
+  status                String   @default("DRAFT") // DRAFT, SENT, ACCEPTED, REJECTED, CONVERTED_TO_INVOICE, EXPIRED
+  subtotal              Float    @default(0)
+  taxRate               Float    @default(0)
+  taxAmount             Float    @default(0)
+  discountAmount        Float    @default(0)
+  discountPercentage    Float    @default(0)
+  total                 Float    @default(0)
+  currency              String   @default("USD")
+  notes                 String?  @db.Text
+  termsAndConditions    String?  @db.Text
+  convertedToInvoiceId  Int?     // Reference to invoice if converted
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  company Company           @relation(fields: [companyId], references: [id])
+  items   ProformaItem[]
+}
+
+model ProformaItem {
+  id                Int      @id @default(autoincrement())
+  proformaId        Int
+  productId         Int?
+  serviceId         Int?
+  description       String
+  quantity          Int      @default(1)
+  unitPrice         Float
+  discount          Float    @default(0)
+  discountPercentage Float   @default(0)
+  taxRate           Float    @default(0)
+  subtotal          Float    @default(0)
+  totalAfterDiscount Float   @default(0)
+  taxAmount         Float    @default(0)
+  total             Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  proforma Proforma @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+  product  Product? @relation(fields: [productId], references: [id])
+  service  Service? @relation(fields: [serviceId], references: [id])
 }

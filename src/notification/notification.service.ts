@@ -1,15 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  CreateNotificationDto,
-  NotificationType,
-} from './dto/create-notification.dto';
+import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 
 export interface NotificationData {
   userId: number;
   content: string;
-  type?: NotificationType;
+  type?: string;
 }
 
 @Injectable()
@@ -25,7 +22,7 @@ export class NotificationService {
   async createForUser(
     userId: number,
     content: string,
-    type: NotificationType = NotificationType.INFO,
+    type: string = 'INFO',
   ) {
     return this.create({
       userId,
@@ -36,7 +33,7 @@ export class NotificationService {
 
   async createForAllUsers(
     content: string,
-    type: NotificationType = NotificationType.INFO,
+    type: string = 'INFO',
   ) {
     // Get all users
     const users = await this.prisma.user.findMany({
@@ -53,7 +50,7 @@ export class NotificationService {
 
   async createForAdmins(
     content: string,
-    type: NotificationType = NotificationType.INFO,
+    type: string = 'INFO',
   ) {
     // Get all admin users
     const admins = await this.prisma.user.findMany({
@@ -76,7 +73,7 @@ export class NotificationService {
     createdBy?: number,
   ) {
     const content = `New budget "${budgetName}" created with amount $${amount}`;
-    await this.createForAdmins(content, NotificationType.SUCCESS);
+    await this.createForAdmins(content, 'INFO');
   }
 
   async notifyBudgetUpdated(
@@ -85,12 +82,12 @@ export class NotificationService {
     newAmount: number,
   ) {
     const content = `Budget "${budgetName}" updated: $${oldAmount} → $${newAmount}`;
-    await this.createForAdmins(content, NotificationType.INFO);
+    await this.createForAdmins(content, "INFO");
   }
 
   async notifyBudgetDeleted(budgetName: string) {
     const content = `Budget "${budgetName}" has been deleted`;
-    await this.createForAdmins(content, NotificationType.WARNING);
+    await this.createForAdmins(content, "WARNING");
   }
 
   async notifyLowBudget(
@@ -99,25 +96,25 @@ export class NotificationService {
     threshold: number = 100,
   ) {
     const content = `Budget "${budgetName}" is running low: $${currentAmount} (below $${threshold})`;
-    await this.createForAdmins(content, NotificationType.ALERT);
+    await this.createForAdmins(content, "ALERT");
   }
 
   // Category-related notifications
   async notifyCategoryCreated(categoryName: string, createdBy?: number) {
     const content = `New category "${categoryName}" has been created`;
-    await this.createForAdmins(content, NotificationType.SUCCESS);
+    await this.createForAdmins(content, "INFO");
   }
 
   async notifyCategoryUpdated(categoryName: string, oldName?: string) {
     const content = oldName
       ? `Category "${oldName}" has been renamed to "${categoryName}"`
       : `Category "${categoryName}" has been updated`;
-    await this.createForAdmins(content, NotificationType.INFO);
+    await this.createForAdmins(content, "INFO");
   }
 
   async notifyCategoryDeleted(categoryName: string) {
     const content = `Category "${categoryName}" has been deleted`;
-    await this.createForAdmins(content, NotificationType.WARNING);
+    await this.createForAdmins(content, "WARNING");
   }
 
   // Product-related notifications
@@ -128,17 +125,17 @@ export class NotificationService {
     createdBy?: number,
   ) {
     const content = `New product "${productName}" added: $${price} (Stock: ${stock})`;
-    await this.createForAdmins(content, NotificationType.SUCCESS);
+    await this.createForAdmins(content, "INFO");
   }
 
   async notifyProductUpdated(productName: string, changes: string[]) {
     const content = `Product "${productName}" updated: ${changes.join(', ')}`;
-    await this.createForAdmins(content, NotificationType.INFO);
+    await this.createForAdmins(content, "INFO");
   }
 
   async notifyProductDeleted(productName: string) {
     const content = `Product "${productName}" has been deleted`;
-    await this.createForAdmins(content, NotificationType.WARNING);
+    await this.createForAdmins(content, "WARNING");
   }
 
   async notifyLowStock(
@@ -147,12 +144,12 @@ export class NotificationService {
     threshold: number = 10,
   ) {
     const content = `Low stock alert: "${productName}" has only ${currentStock} units remaining`;
-    await this.createForAdmins(content, NotificationType.ALERT);
+    await this.createForAdmins(content, "ALERT");
   }
 
   async notifyOutOfStock(productName: string) {
     const content = `Out of stock alert: "${productName}" is completely out of stock`;
-    await this.createForAdmins(content, NotificationType.ALERT);
+    await this.createForAdmins(content, "ALERT");
   }
 
   // Service-related notifications
@@ -162,35 +159,35 @@ export class NotificationService {
     createdBy?: number,
   ) {
     const content = `New service "${serviceName}" added: $${price}`;
-    await this.createForAdmins(content, NotificationType.SUCCESS);
+    await this.createForAdmins(content, "INFO");
   }
 
   async notifyServiceUpdated(serviceName: string, changes: string[]) {
     const content = `Service "${serviceName}" updated: ${changes.join(', ')}`;
-    await this.createForAdmins(content, NotificationType.INFO);
+    await this.createForAdmins(content, "INFO");
   }
 
   async notifyServiceDeleted(serviceName: string) {
     const content = `Service "${serviceName}" has been deleted`;
-    await this.createForAdmins(content, NotificationType.WARNING);
+    await this.createForAdmins(content, "WARNING");
   }
 
   async notifyServiceDeactivated(serviceName: string) {
     const content = `Service "${serviceName}" has been deactivated`;
-    await this.createForAdmins(content, NotificationType.WARNING);
+    await this.createForAdmins(content, "WARNING");
   }
 
   // General notifications
   async notifySystemEvent(event: string, details?: string) {
     const content = details ? `${event}: ${details}` : event;
-    await this.createForAdmins(content, NotificationType.INFO);
+    await this.createForAdmins(content, "INFO");
   }
 
   async notifyError(error: string, context?: string) {
     const content = context
       ? `Error in ${context}: ${error}`
       : `System error: ${error}`;
-    await this.createForAdmins(content, NotificationType.ALERT);
+    await this.createForAdmins(content, "ALERT");
   }
 
   // Get notifications for a user
@@ -202,24 +199,22 @@ export class NotificationService {
     });
   }
 
-  // Mark notification as read
-  async markAsRead(notificationId: number) {
+  // Legacy methods for backward compatibility
+  async markAsReadLegacy(notificationId: number) {
     return this.prisma.notification.update({
       where: { id: notificationId },
       data: { read: true },
     });
   }
 
-  // Mark all notifications as read for a user
-  async markAllAsRead(userId: number) {
+  async markAllAsReadLegacy(userId: number) {
     return this.prisma.notification.updateMany({
       where: { userId, read: false },
       data: { read: true },
     });
   }
 
-  // Get unread notification count for a user
-  async getUnreadCount(userId: number) {
+  async getUnreadCountLegacy(userId: number) {
     return this.prisma.notification.count({
       where: { userId, read: false },
     });
@@ -243,30 +238,116 @@ export class NotificationService {
   async findAll() {
     return this.prisma.notification.findMany({
       include: {
-        // Add your relations here
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
   }
 
-  async findOne(id: number) {
-    return this.prisma.notification.findUnique({
+  async remove(id: number, userId?: number) {
+    const notification = await this.findOne(id, userId);
+    return this.prisma.notification.delete({
+      where: { id },
+    });
+  }
+
+  async findAllForUser(userId: number, filters?: { read?: boolean; type?: string }) {
+    const where: any = { userId };
+    
+    if (filters?.read !== undefined) {
+      where.read = filters.read;
+    }
+    
+    if (filters?.type) {
+      where.type = filters.type;
+    }
+
+    return this.prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findOne(id: number, userId?: number) {
+    const notification = await this.prisma.notification.findUnique({
       where: { id },
       include: {
-        // Add your relations here
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
+
+    if (!notification) {
+      throw new NotFoundException(`Notification with ID ${id} not found`);
+    }
+
+    if (userId && notification.userId !== userId) {
+      throw new ForbiddenException('You can only access your own notifications');
+    }
+
+    return notification;
   }
 
-  async update(id: number, updateNotificationDto: UpdateNotificationDto) {
+  async update(id: number, updateNotificationDto: UpdateNotificationDto, userId?: number) {
+    await this.findOne(id, userId);
+    
     return this.prisma.notification.update({
       where: { id },
       data: updateNotificationDto,
     });
   }
 
-  async remove(id: number) {
-    return this.prisma.notification.delete({
+  async markAsRead(id: number, userId: number) {
+    await this.findOne(id, userId);
+    
+    return this.prisma.notification.update({
       where: { id },
+      data: { read: true },
+    });
+  }
+
+  async markAllAsRead(userId: number) {
+    const result = await this.prisma.notification.updateMany({
+      where: { userId, read: false },
+      data: { read: true },
+    });
+
+    return {
+      count: result.count,
+      message: 'All notifications marked as read',
+    };
+  }
+
+  async getUnreadCount(userId: number) {
+    const count = await this.prisma.notification.count({
+      where: { userId, read: false },
+    });
+
+    return { count };
+  }
+
+  async clearAll(userId: number) {
+    await this.prisma.notification.deleteMany({
+      where: { userId },
     });
   }
 }

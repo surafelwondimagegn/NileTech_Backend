@@ -1,98 +1,205 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Niletech Backend System
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A comprehensive backend system for Niletech company built with NestJS, Prisma, and TypeScript. This system handles all aspects of a technology services company including projects, employees, payroll, invoicing, time tracking, and more.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Features
 
-## Description
+### Core Business Modules
+- **Company Management** - Multi-company support with comprehensive company profiles
+- **Employee Management** - Full employee lifecycle with detailed profiles and HR data
+- **Project Management** - Project tracking with status, progress, and client management
+- **Time Tracking** - Project time entries with start/stop functionality
+- **Invoicing** - Complete invoicing system with items, taxes, and payment tracking
+- **Payroll** - Employee payroll management with deductions and bonuses
+- **Notifications** - Real-time notification system with WebSocket support
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+### Service & Product Management
+- **Services** - Service catalog with pricing and categorization
+- **Products** - Product inventory with stock management
+- **Categories** - Categorization system for products and services
+- **Tax Management** - Flexible tax system with multiple tax types
 
-## Project setup
+### Financial Management
+- **Revenue Tracking** - Revenue from projects, products, and services
+- **Expense Management** - Project and budget-based expense tracking
+- **Budget Management** - Budget creation and monitoring
+- **Profit Analysis** - Profit calculation and reporting
+- **Payment Processing** - Multiple payment methods and tracking
 
-```bash
-$ npm install
-```
+### Advanced Features
+- **Proforma Invoices** - Proforma invoice generation and management
+- **Receipts** - Receipt generation for payments
+- **Inventory Transactions** - Stock movement tracking
+- **Sold Products/Services** - Sales tracking with profit calculation
+- **User Management** - Role-based access control
+- **Authentication** - JWT-based authentication with refresh tokens
 
-## Compile and run the project
+## Technology Stack
 
-```bash
-# development
-$ npm run start
+- **Framework**: NestJS
+- **Database**: MySQL with Prisma ORM
+- **Authentication**: JWT with Passport
+- **Documentation**: Swagger/OpenAPI
+- **Real-time**: WebSockets for notifications
+- **Validation**: class-validator and class-transformer
 
-# watch mode
-$ npm run start:dev
+## API Endpoints
 
-# production mode
-$ npm run start:prod
-```
+### Core Modules
+- `/companies` - Company management
+- `/employees` - Employee management
+- `/projects` - Project management
+- `/project-time-entries` - Time tracking
+- `/notifications` - Notification system
+- `/invoices` - Invoice management
+- `/payments` - Payment processing
+- `/payrolls` - Payroll management
 
-## Run tests
+### Product & Service Management
+- `/products` - Product catalog
+- `/services` - Service catalog
+- `/categories` - Category management
+- `/inventory-transactions` - Stock movements
 
-```bash
-# unit tests
-$ npm run test
+### Financial Management
+- `/revenue` - Revenue tracking
+- `/expenses` - Expense management
+- `/budgets` - Budget management
+- `/profits` - Profit analysis
+- `/taxes` - Tax management
 
-# e2e tests
-$ npm run test:e2e
+### Additional Features
+- `/proformas` - Proforma invoices
+- `/receipts` - Receipt management
+- `/users` - User management
+- `/auth` - Authentication endpoints
 
-# test coverage
-$ npm run test:cov
-```
+## Database Schema
 
-## Deployment
+The system uses a comprehensive database schema with the following main entities:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### Core Entities
+- **Company** - Company information and settings
+- **Employee** - Employee profiles with HR data
+- **User** - System users with authentication
+- **Project** - Project management with status tracking
+- **ProjectTimeEntry** - Time tracking for projects
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Financial Entities
+- **Invoice** - Invoice management with items
+- **Payment** - Payment tracking and processing
+- **Payroll** - Employee payroll records
+- **Revenue** - Revenue tracking from multiple sources
+- **Expense** - Expense management and tracking
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+### Product & Service Entities
+- **Product** - Product catalog with inventory
+- **Service** - Service catalog with pricing
+- **SoldProduct** - Sales tracking for products
+- **SoldService** - Sales tracking for services
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Setup Instructions
 
-## Resources
+1. **Install Dependencies**
+   ```bash
+   npm install
+   ```
 
-Check out a few resources that may come in handy when working with NestJS:
+2. **Database Setup**
+   ```bash
+   # Generate Prisma client
+   npx prisma generate
+   
+   # Run database migrations
+   npx prisma migrate dev
+   ```
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+3. **Environment Configuration**
+   Create a `.env` file with:
+   ```env
+   DATABASE_URL="mysql://username:password@localhost:3306/niletech"
+   JWT_SECRET="your-jwt-secret"
+   JWT_REFRESH_SECRET="your-refresh-secret"
+   ```
 
-## Support
+4. **Start Development Server**
+   ```bash
+   npm run start:dev
+   ```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+5. **Access API Documentation**
+   Visit `http://localhost:3000/api` for Swagger documentation
 
-## Stay in touch
+## Key Features Implemented
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### Authentication & Authorization
+- JWT-based authentication
+- Refresh token mechanism
+- Role-based access control (OWNER, MANAGER, DEVELOPER, USER, ADMIN, etc.)
+
+### Real-time Features
+- WebSocket notifications
+- Real-time project updates
+- Live notification system
+
+### Business Logic
+- Automatic profit calculation for sales
+- Tax calculation and accumulation
+- Budget tracking and alerts
+- Stock management with low stock alerts
+- Project progress tracking
+
+### Data Validation
+- Comprehensive DTO validation
+- Type-safe database operations
+- Error handling and logging
+
+### API Documentation
+- Complete Swagger/OpenAPI documentation
+- Request/response examples
+- Authentication requirements
+
+## Architecture
+
+The system follows NestJS best practices with:
+
+- **Modular Architecture** - Each business domain in separate modules
+- **Service Layer** - Business logic separated from controllers
+- **DTO Pattern** - Data transfer objects for validation
+- **Repository Pattern** - Database access through Prisma
+- **Dependency Injection** - NestJS built-in DI container
+
+## Security Features
+
+- JWT authentication with expiration
+- Password hashing with bcrypt
+- Role-based access control
+- Input validation and sanitization
+- SQL injection prevention through Prisma
+
+## Performance Considerations
+
+- Database indexing on foreign keys
+- Efficient queries with Prisma includes
+- Pagination support for large datasets
+- Background job processing capability
+
+## Future Enhancements
+
+- File upload and storage
+- Email notification system
+- Advanced reporting and analytics
+- Multi-currency support
+- API rate limiting
+- Audit logging
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Implement your changes with tests
+4. Submit a pull request
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+This project is proprietary to Niletech.

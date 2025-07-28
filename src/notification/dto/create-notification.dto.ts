@@ -1,50 +1,27 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsString,
-  IsNumber,
-  IsOptional,
-  IsBoolean,
-  IsEnum,
-} from 'class-validator';
-
-export enum NotificationType {
-  INFO = 'INFO',
-  WARNING = 'WARNING',
-  ALERT = 'ALERT',
-  SUCCESS = 'SUCCESS',
-}
+import { IsString, IsNumber, IsOptional, IsIn, IsBoolean } from 'class-validator';
 
 export class CreateNotificationDto {
-  @ApiProperty({
-    description: 'User ID who will receive the notification',
-    example: 1,
-  })
+  @ApiProperty({ example: 1, description: 'User ID who receives the notification' })
   @IsNumber()
   userId: number;
 
-  @ApiProperty({
-    description: 'Notification content',
-    example: 'Your order has been processed successfully',
-  })
+  @ApiProperty({ example: 'Your project has been updated', description: 'Notification content' })
   @IsString()
   content: string;
 
-  @ApiProperty({
-    description: 'Notification type',
-    enum: NotificationType,
-    example: NotificationType.INFO,
-    required: false,
+  @ApiProperty({ 
+    example: 'INFO', 
+    description: 'Notification type', 
+    enum: ['INFO', 'WARNING', 'ALERT'],
+    required: false 
   })
-  @IsEnum(NotificationType)
   @IsOptional()
-  type?: NotificationType = NotificationType.INFO;
+  @IsIn(['INFO', 'WARNING', 'ALERT'])
+  type?: string;
 
-  @ApiProperty({
-    description: 'Whether the notification has been read',
-    example: false,
-    required: false,
-  })
-  @IsBoolean()
+  @ApiProperty({ example: false, description: 'Whether the notification has been read', required: false })
   @IsOptional()
-  read?: boolean = false;
+  @IsBoolean()
+  read?: boolean;
 }
