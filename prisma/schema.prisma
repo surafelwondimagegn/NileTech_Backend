@@ -1,0 +1,741 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  STOREKEEPER
+  DEVELOPER
+  USER
+  ADMIN
+  TECHNICIAN
+}
+
+enum ProjectStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id                        Int              @id @default(autoincrement())
+  name                      String
+  email                     String           @unique
+  password                  String
+  role                      Role             @default(USER)
+  isActive                  Boolean          @default(true)
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+  profile                   Profile?
+  projects                  Project[]        @relation("AssignedProjects")
+  clientProjects            Project[]        @relation("ClientProjects")
+  refreshTokens             RefreshToken[]
+  sentMessages              Message[]        @relation("SentMessages")
+  receivedMessages          Message[]        @relation("ReceivedMessages")
+  notifications             Notification[]
+  todos                     Todo[]
+  tasksAssigned             Task[]           @relation("UserTasks")
+  Transaction               Transaction[]
+  budgetHistory             BudgetHistory[]
+  projectUpdates            ProjectUpdate[]
+  projectHistory            ProjectHistory[]
+  projectUpdatesBy          Project[]        @relation("ProjectUpdates")
+  projectServiceAssignments ProjectService[] @relation("ProjectServiceAssignments")
+  projectTimeEntries        ProjectTimeEntry[]
+}
+
+model Profile {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @unique
+  avatar      String? // URL to profile picture
+  bio         String?   @db.Text // User biography/description
+  phoneNumber String?
+  dateOfBirth DateTime?
+  gender      String? // "MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY"
+  address     String?   @db.Text
+  city        String?
+  state       String?
+  country     String?
+  postalCode  String?
+  timezone    String?   @default("UTC")
+  language    String?   @default("en")
+  currency    String?   @default("USD")
+
+  // Professional Information
+  jobTitle       String?
+  company        String?
+  department     String?
+  employeeId     String?
+  hireDate       DateTime?
+  skills         String?   @db.Text // JSON array of skills
+  certifications String?   @db.Text // JSON array of certifications
+  experience     Int? // Years of experience
+
+  // Social Media & Contact
+  website   String?
+  linkedin  String?
+  twitter   String?
+  github    String?
+  facebook  String?
+  instagram String?
+
+  // Preferences & Settings
+  emailNotifications Boolean @default(true)
+  smsNotifications   Boolean @default(false)
+  pushNotifications  Boolean @default(true)
+  twoFactorEnabled   Boolean @default(false)
+  theme              String? @default("light") // "light", "dark", "auto"
+
+  // Emergency Contact
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactEmail    String?
+  emergencyContactRelation String?
+
+  // System Fields
+  lastLoginAt       DateTime?
+  lastActiveAt      DateTime?
+  loginCount        Int       @default(0)
+  isProfileComplete Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Service {
+  id           Int       @id @default(autoincrement())
+  name         String
+  categoryId   Int?
+  category     Category? @relation(fields: [categoryId], references: [id])
+  description  String?
+  price        Float     // Selling price (default)
+  cost         Float?    // Cost to provide the service (for profit calculation)
+  isActive     Boolean   @default(true)
+  duration     Int? // Estimated duration in hours
+  serviceCode  String?   @unique // Unique service identifier
+  requirements String? // What's needed to perform the service
+  warrantyDays Int? // Warranty period in days
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  projects     ProjectService[]
+  invoiceItems InvoiceItem[]
+  taxId        Int?
+  tax          Tax?                   @relation(fields: [taxId], references: [id])
+  soldServices SoldService[]
+}
+
+model Project {
+  id                 Int           @id @default(autoincrement())
+  title              String
+  description        String?       @db.Text
+  clientName         String
+  clientEmail        String?
+  clientPhone        String?
+  clientId           Int
+  budgetId           Int?
+  assignedToId       Int?
+  status             ProjectStatus @default(PENDING)
+  priority           String?       @default("MEDIUM") // "LOW", "MEDIUM", "HIGH", "URGENT"
+  estimatedHours     Int? // Estimated total hours for the project
+  actualHours        Int? // Actual hours spent on the project
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  deadline           DateTime?
+  notes              String?       @db.Text
+  clientFeedback     String?       @db.Text
+  internalNotes      String?       @db.Text // Notes visible only to staff
+  lastUpdatedBy      Int?
+  isPublic           Boolean       @default(true) // Whether project is visible to client
+  allowClientUpdates Boolean       @default(false) // Whether client can add updates
+  
+  // Project Tracking Fields
+  progress           Int           @default(0) // 0-100 percentage
+  timeSpent          Int           @default(0) // Total time spent in minutes
+  timeEstimated      Int? // Estimated time in minutes
+  lastActivityAt     DateTime? // Last activity timestamp
+  milestones         ProjectMilestone[]
+  timeEntries        ProjectTimeEntry[]
+  
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  client            User             @relation("ClientProjects", fields: [clientId], references: [id])
+  budget            Budget?          @relation(fields: [budgetId], references: [id])
+  assignedTo        User?            @relation("AssignedProjects", fields: [assignedToId], references: [id])
+  lastUpdatedByUser User?            @relation("ProjectUpdates", fields: [lastUpdatedBy], references: [id])
+  expenses          Expense[]
+  invoices          Invoice[]
+  Task              Task[]
+  Revenue           Revenue[]
+  Profit            Profit[]
+  updates           ProjectUpdate[]
+  history           ProjectHistory[]
+  services          ProjectService[]
+  products          ProjectProduct[]
+  messages            Message[]
+}
+
+model Expense {
+  id            Int      @id @default(autoincrement())
+  projectId     Int?
+  soldProductId Int? // New field for expenses related to sold products
+  budgetId      Int? // New field for budget-funded expenses
+  amount        Float
+  note          String
+  fundingSource String   @default("BUDGET") // "BUDGET" or "PROFIT"
+  createdAt     DateTime @default(now())
+  soldServiceId Int?
+
+  project     Project?     @relation(fields: [projectId], references: [id])
+  soldProduct SoldProduct? @relation(fields: [soldProductId], references: [id])
+  budget      Budget?      @relation(fields: [budgetId], references: [id])
+  soldService SoldService? @relation(fields: [soldServiceId], references: [id])
+}
+
+enum ProductQuality {
+  BRAND_NEW
+  SECOND_HAND
+  REFURBISHED
+  USED
+}
+
+enum TaxType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+model Tax {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  rate        Float    // Tax rate (percentage or fixed amount)
+  type        TaxType  @default(PERCENTAGE)
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false) // Default tax for the system
+  country     String?  // Country code for region-specific taxes
+  state       String?  // State/province for region-specific taxes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+  services Service[]
+  soldProducts SoldProduct[]
+  invoiceItems InvoiceItem[]
+  taxAccumulations TaxAccumulation[]
+  soldServices SoldService[]
+}
+
+model TaxAccumulation {
+  id        Int      @id @default(autoincrement())
+  taxId     Int
+  month     Int      // Month (1-12)
+  year      Int      // Year
+  totalTax  Float    @default(0) // Total tax collected for this month/year
+  totalSales Float   @default(0) // Total sales amount for this month/year
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tax Tax @relation(fields: [taxId], references: [id])
+
+  @@unique([taxId, month, year])
+}
+
+model Product {
+  id           Int       @id @default(autoincrement())
+  name         String
+  categoryId   Int?
+  category     Category? @relation(fields: [categoryId], references: [id])
+  description  String?
+  buyingPrice  Float
+  sellingPrice Float
+  stock        Int       @default(0)
+  image        String? // URL or path to product image
+  sku          String?   @unique // Stock Keeping Unit
+  weight       Float? // Product weight in kg
+  brand        String? // Product brand name
+  model        String? // Product model number
+  quality      ProductQuality @default(BRAND_NEW)
+  condition    String? // Product condition description
+  warranty     Int? // Warranty period in days
+  supplier     String? // Supplier or manufacturer name
+  supplierContact String? // Supplier contact information
+  minStockLevel Int? // Minimum stock level for alerts
+  maxStockLevel Int? // Maximum stock level
+  location     String? // Storage location
+  tags         String? // Comma-separated tags for categorization
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  projects     ProjectProduct[]
+  invoiceItems InvoiceItem[]
+  transactions InventoryTransaction[]
+  soldProducts SoldProduct[]
+  budgetId     Int?
+  budget       Budget?                @relation(fields: [budgetId], references: [id])
+  taxId        Int?
+  tax          Tax?                   @relation(fields: [taxId], references: [id])
+}
+
+model Invoice {
+  id                    Int           @id @default(autoincrement())
+  invoiceNumber         String?       @unique // Temporarily optional for migration
+  clientName            String
+  clientEmail           String? // Optional email for manual invoices
+  clientPhone           String? // Optional phone for manual invoices
+  clientAddress         String? // Client address
+  projectId             Int? // Optional - for project-based invoices
+  status                String        @default("DRAFT") // "DRAFT", "SENT", "PAID", "OVERDUE", "CANCELLED", "PARTIALLY_PAID"
+  paymentTerms          String        @default("NET_30") // "IMMEDIATE", "NET_7", "NET_15", "NET_30", "NET_45", "NET_60", "CUSTOM"
+  customPaymentDays     Int? // Custom payment days when paymentTerms is CUSTOM
+  issuedAt              DateTime      @default(now())
+  dueDate               DateTime? // Calculated based on payment terms
+  subtotal              Float         @default(0) // Sum of all items before discounts
+  taxRate               Float         @default(0) // Tax rate for the entire invoice
+  taxAmount             Float         @default(0) // Calculated tax amount
+  discountAmount        Float         @default(0) // Discount amount for the entire invoice
+  discountPercentage    Float         @default(0) // Discount percentage for the entire invoice
+  shippingAmount        Float         @default(0) // Shipping amount
+  total                 Float         @default(0) // Grand total
+  currency              String        @default("USD") // Currency code
+  purchaseOrderNumber   String? // Purchase order number
+  notes                 String? // Optional notes for manual invoices
+  termsAndConditions    String? // Terms and conditions
+  includeTax            Boolean       @default(true) // Whether to include tax
+  includeShipping       Boolean       @default(false) // Whether to include shipping
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @default(now())
+
+  project Project?      @relation(fields: [projectId], references: [id])
+  items   InvoiceItem[]
+  Payment Payment[]
+  Revenue Revenue[]
+}
+
+model InvoiceItem {
+  id                Int     @id @default(autoincrement())
+  invoiceId         Int
+  productId         Int?
+  serviceId         Int?
+  quantity          Int     @default(1)
+  unitPrice         Float
+  discount          Float   @default(0) // Discount amount for this item
+  discountPercentage Float  @default(0) // Discount percentage for this item
+  taxRate           Float   @default(0) // Tax rate for this item
+  subtotal          Float   @default(0) // quantity * unitPrice
+  totalAfterDiscount Float  @default(0) // subtotal - discount
+  taxAmount         Float   @default(0) // Calculated tax amount for this item
+  total             Float   @default(0) // totalAfterDiscount + taxAmount
+  description       String? // Description of the item (e.g., "Premium service with extended warranty")
+  useDefaultPrice   Boolean @default(false) // Whether to use default price from product/service
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+  service Service? @relation(fields: [serviceId], references: [id])
+  taxId   Int?
+  tax     Tax?      @relation(fields: [taxId], references: [id])
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @db.Text
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum StockTransactionType {
+  INCOMING
+  OUTGOING
+  ADJUSTMENT
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  products Product[]
+  services Service[]
+}
+
+model PaymentMethod {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  icon        String? // Icon or emoji for the payment method
+  color       String? // Color code for UI display
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  payments Payment[]
+}
+
+model Payment {
+  id        Int           @id @default(autoincrement())
+  invoiceId Int
+  methodId  Int
+  amount    Float
+  status    PaymentStatus @default(PENDING)
+  reference String? // Payment reference number or transaction ID
+  notes     String? // Additional payment notes
+  paidAt    DateTime      @default(now())
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  invoice     Invoice       @relation(fields: [invoiceId], references: [id])
+  method      PaymentMethod @relation(fields: [methodId], references: [id])
+  Transaction Transaction[]
+  Receipt     Receipt[]
+}
+
+model Task {
+  id           Int        @id @default(autoincrement())
+  projectId    Int
+  assignedToId Int?
+  title        String
+  description  String?
+  status       TaskStatus @default(TODO)
+  dueDate      DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  project    Project @relation(fields: [projectId], references: [id])
+  assignedTo User?   @relation("UserTasks", fields: [assignedToId], references: [id])
+}
+
+model Todo {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  title       String
+  description String?
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Budget {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  category    String?
+  description String?
+  amount      Float
+  createdAt   DateTime @default(now())
+
+  products Product[]
+  history  BudgetHistory[]
+  projects Project[]
+  expenses Expense[]
+}
+
+model Revenue {
+  id            Int      @id @default(autoincrement())
+  projectId     Int?
+  invoiceId     Int?
+  soldProductId Int? // New field for sold product revenue
+  amount        Float
+  receivedAt    DateTime @default(now())
+  soldServiceId Int?
+
+  project     Project?     @relation(fields: [projectId], references: [id])
+  invoice     Invoice?     @relation(fields: [invoiceId], references: [id])
+  soldProduct SoldProduct? @relation(fields: [soldProductId], references: [id])
+  soldService SoldService? @relation(fields: [soldServiceId], references: [id])
+}
+
+model Profit {
+  id            Int      @id @default(autoincrement())
+  projectId     Int?
+  soldProductId Int? // New field for sold product profit
+  amount        Float
+  calculatedAt  DateTime @default(now())
+  soldServiceId Int?
+
+  project     Project?     @relation(fields: [projectId], references: [id])
+  soldProduct SoldProduct? @relation(fields: [soldProductId], references: [id])
+  soldService SoldService? @relation(fields: [soldServiceId], references: [id])
+}
+
+model InventoryTransaction {
+  id              Int                  @id @default(autoincrement())
+  productId       Int
+  quantity        Int
+  transactionType StockTransactionType
+  note            String?
+  createdAt       DateTime             @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ALERT
+}
+
+model Transaction {
+  id          Int             @id @default(autoincrement())
+  userId      Int?
+  paymentId   Int?
+  amount      Float
+  type        TransactionType
+  description String?
+  createdAt   DateTime        @default(now())
+
+  user    User?    @relation(fields: [userId], references: [id])
+  payment Payment? @relation(fields: [paymentId], references: [id])
+}
+
+model Receipt {
+  id        Int      @id @default(autoincrement())
+  paymentId Int
+  number    String   @unique
+  issuedAt  DateTime @default(now())
+  note      String?
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+}
+
+model Message {
+  id         Int      @id @default(autoincrement())
+  senderId   Int
+  receiverId Int?
+  projectId  Int? // For project-based chat rooms
+  content    String   @db.Text
+  messageType String  @default("TEXT") // "TEXT", "FILE", "SYSTEM"
+  fileUrl    String? // URL to uploaded file
+  fileName   String? // Original filename
+  fileSize   Int? // File size in bytes
+  isEdited   Boolean  @default(false)
+  editedAt   DateTime?
+  replyToId  Int? // For reply messages
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User? @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  project  Project? @relation(fields: [projectId], references: [id])
+  replyTo  Message? @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies  Message[] @relation("MessageReplies")
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  content   String
+  type      NotificationType @default(INFO)
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model BudgetHistory {
+  id        Int      @id @default(autoincrement())
+  budgetId  Int
+  action    String // "CREATED", "UPDATED", "DELETED", "AMOUNT_CHANGED", "CATEGORY_CHANGED"
+  oldValue  String?  @db.Text // JSON string of old values
+  newValue  String?  @db.Text // JSON string of new values
+  changedBy Int // User ID who made the change
+  createdAt DateTime @default(now())
+
+  budget Budget @relation(fields: [budgetId], references: [id])
+  user   User   @relation(fields: [changedBy], references: [id])
+}
+
+model ProjectUpdate {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  content   String
+  type      String // "status", "message", "file", "milestone", "invoice"
+  createdBy Int
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [createdBy], references: [id])
+}
+
+model ProjectHistory {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  action    String // "CREATED", "STATUS_CHANGED", "ASSIGNED", "INVOICE_CREATED", "PAYMENT_RECEIVED", "SERVICE_ADDED", "PRODUCT_ADDED", "PRICE_UPDATED", "DEADLINE_CHANGED", "PRIORITY_CHANGED", "PROGRESS_UPDATED", "TIME_LOGGED"
+  details   String?  @db.Text // JSON string of details - using Text for larger content
+  oldValue  String?  @db.Text // Previous value before change
+  newValue  String?  @db.Text // New value after change
+  createdBy Int
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [createdBy], references: [id])
+}
+
+model ProjectMilestone {
+  id          Int       @id @default(autoincrement())
+  projectId   Int
+  title       String
+  description String?   @db.Text
+  dueDate     DateTime?
+  completedAt DateTime?
+  progress    Int       @default(0) // 0-100 percentage
+  isCompleted Boolean   @default(false)
+  order       Int       @default(0) // Order of milestone
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProjectTimeEntry {
+  id          Int       @id @default(autoincrement())
+  projectId   Int
+  userId      Int
+  description String
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int? // Duration in minutes
+  isActive    Boolean   @default(false) // Whether this time entry is currently running
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+// Junction table for Project-Service relationship
+model ProjectService {
+  id         Int       @id @default(autoincrement())
+  projectId  Int
+  serviceId  Int
+  quantity   Int       @default(1)
+  unitPrice  Float? // Optional - if not provided, use service's default price
+  unitCost   Float? // Optional - if not provided, use service's default cost
+  discount   Float?    @default(0) // Discount percentage or amount
+  totalPrice Float? // Calculated total price (quantity * unitPrice - discount)
+  totalCost  Float? // Calculated total cost (quantity * unitCost)
+  totalProfit Float? // Calculated profit (totalPrice - totalCost)
+  notes      String?   @db.Text
+  status     String?   @default("PENDING") // "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"
+  startDate  DateTime?
+  endDate    DateTime?
+  assignedTo Int? // User ID assigned to this service
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  service        Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  assignedToUser User?   @relation("ProjectServiceAssignments", fields: [assignedTo], references: [id])
+
+  @@unique([projectId, serviceId])
+}
+
+// Junction table for Project-Product relationship
+model ProjectProduct {
+  id            Int       @id @default(autoincrement())
+  projectId     Int
+  productId     Int
+  quantity      Int       @default(1)
+  unitPrice     Float? // Optional - if not provided, use product's selling price
+  unitCost      Float? // Optional - if not provided, use product's buying price
+  discount      Float?    @default(0) // Discount percentage or amount
+  totalPrice    Float? // Calculated total price (quantity * unitPrice - discount)
+  totalCost     Float? // Calculated total cost (quantity * unitCost)
+  totalProfit   Float? // Calculated profit (totalPrice - totalCost)
+  notes         String?   @db.Text
+  status        String?   @default("PENDING") // "PENDING", "ORDERED", "RECEIVED", "INSTALLED", "CANCELLED"
+  orderDate     DateTime?
+  receivedDate  DateTime?
+  installedDate DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, productId])
+}
+
+// Model to track sold products
+model SoldProduct {
+  id            Int      @id @default(autoincrement())
+  productId     Int
+  quantity      Int
+  sellingPrice  Float // Price at which it was sold
+  buyingPrice   Float // Original buying price for profit calculation
+  totalRevenue  Float // quantity * sellingPrice
+  totalProfit   Float // quantity * (sellingPrice - buyingPrice)
+  customerName  String?
+  customerEmail String?
+  customerPhone String?
+  notes         String?
+  soldAt        DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product Product   @relation(fields: [productId], references: [id])
+  revenue Revenue[]
+  profit  Profit[]
+  expense Expense[]
+  taxId   Int?
+  tax     Tax?      @relation(fields: [taxId], references: [id])
+  taxAmount Float   @default(0) // Tax amount collected on this sale
+}
+
+model SoldService {
+  id            Int      @id @default(autoincrement())
+  serviceId     Int
+  quantity      Int      @default(1)
+  sellingPrice  Float    // Price at which it was sold
+  cost          Float    // Cost to provide the service
+  totalRevenue  Float    // quantity * sellingPrice
+  totalProfit   Float    // quantity * (sellingPrice - cost)
+  customerName  String?
+  customerEmail String?
+  customerPhone String?
+  notes         String?
+  soldAt        DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  service Service   @relation(fields: [serviceId], references: [id])
+  revenue Revenue[]
+  profit  Profit[]
+  expense Expense[]
+  taxId   Int?
+  tax     Tax?      @relation(fields: [taxId], references: [id])
+  taxAmount Float   @default(0) // Tax amount collected on this sale
+}
