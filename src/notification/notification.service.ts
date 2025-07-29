@@ -18,7 +18,11 @@ export class NotificationService {
 
   async create(createNotificationDto: CreateNotificationDto) {
     return this.prisma.notification.create({
-      data: createNotificationDto,
+      data: {
+        userId: createNotificationDto.userId,
+        content: createNotificationDto.content,
+        type: createNotificationDto.type as any,
+      },
     });
   }
 
@@ -202,28 +206,7 @@ export class NotificationService {
     });
   }
 
-  // Mark notification as read
-  async markAsRead(notificationId: number) {
-    return this.prisma.notification.update({
-      where: { id: notificationId },
-      data: { read: true },
-    });
-  }
 
-  // Mark all notifications as read for a user
-  async markAllAsRead(userId: number) {
-    return this.prisma.notification.updateMany({
-      where: { userId, read: false },
-      data: { read: true },
-    });
-  }
-
-  // Get unread notification count for a user
-  async getUnreadCount(userId: number) {
-    return this.prisma.notification.count({
-      where: { userId, read: false },
-    });
-  }
 
   // Delete old notifications (cleanup)
   async deleteOldNotifications(daysOld: number = 30) {
@@ -240,33 +223,133 @@ export class NotificationService {
     });
   }
 
-  async findAll() {
-    return this.prisma.notification.findMany({
-      include: {
-        // Add your relations here
+  async findAll(query?: any) {
+    const { userId, type, read, page = 1, limit = 10 } = query;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (userId) where.userId = parseInt(userId);
+    if (type) where.type = type;
+    if (read !== undefined) where.read = read === 'true';
+
+    const [notifications, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        skip,
+        take: parseInt(limit),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+
+    return {
+      data: notifications,
+      meta: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit)),
       },
-    });
+    };
   }
 
-  async findOne(id: number) {
-    return this.prisma.notification.findUnique({
-      where: { id },
+  async findOne(id: number, userId?: number) {
+    const where: any = { id };
+    if (userId) where.userId = userId;
+
+    const notification = await this.prisma.notification.findFirst({
+      where,
       include: {
-        // Add your relations here
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
+
+    if (!notification) {
+      throw new Error(`Notification with ID ${id} not found`);
+    }
+
+    return notification;
   }
 
-  async update(id: number, updateNotificationDto: UpdateNotificationDto) {
+  async update(id: number, updateNotificationDto: UpdateNotificationDto, userId?: number) {
+    const where: any = { id };
+    if (userId) where.userId = userId;
+
+    const notification = await this.prisma.notification.findFirst({ where });
+    if (!notification) {
+      throw new Error(`Notification with ID ${id} not found`);
+    }
+
     return this.prisma.notification.update({
       where: { id },
-      data: updateNotificationDto,
+      data: {
+        content: updateNotificationDto.content,
+        type: updateNotificationDto.type as any,
+        read: updateNotificationDto.read,
+      },
     });
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
+    const where: any = { id };
+    if (userId) where.userId = userId;
+
+    const notification = await this.prisma.notification.findFirst({ where });
+    if (!notification) {
+      throw new Error(`Notification with ID ${id} not found`);
+    }
+
     return this.prisma.notification.delete({
       where: { id },
+    });
+  }
+
+  async markAsRead(id: number, userId?: number) {
+    const where: any = { id };
+    if (userId) where.userId = userId;
+
+    const notification = await this.prisma.notification.findFirst({ where });
+    if (!notification) {
+      throw new Error(`Notification with ID ${id} not found`);
+    }
+
+    return this.prisma.notification.update({
+      where: { id },
+      data: { read: true },
+    });
+  }
+
+  async markAllAsRead(userId: number) {
+    return this.prisma.notification.updateMany({
+      where: { userId, read: false },
+      data: { read: true },
+    });
+  }
+
+  async getUnreadCount(userId: number) {
+    return this.prisma.notification.count({
+      where: { userId, read: false },
+    });
+  }
+
+  async clearAll(userId: number) {
+    return this.prisma.notification.deleteMany({
+      where: { userId },
     });
   }
 }

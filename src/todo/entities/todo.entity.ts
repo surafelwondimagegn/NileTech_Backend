@@ -27,8 +27,9 @@ export class Todo {
     example:
       'Write comprehensive documentation for the API endpoints including authentication, error handling, and usage examples',
     type: 'string',
+    nullable: true,
   })
-  description?: string;
+  description?: string | null;
 
   @ApiProperty({
     description: 'Whether the todo item is completed or not',

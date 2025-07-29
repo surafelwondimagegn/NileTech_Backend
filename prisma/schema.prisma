@@ -24,12 +24,35 @@ enum ProjectStatus {
   CANCELLED
 }
 
+model Company {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  address     String?
+  phone       String?
+  email       String?
+  website     String?
+  logo        String? // URL to company logo
+  industry    String?
+  size        String? // "SMALL", "MEDIUM", "LARGE"
+  foundedYear Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  projects    Project[] @relation("CompanyProjects")
+  products    Product[]
+  services    Service[]
+}
+
 model User {
   id                        Int              @id @default(autoincrement())
   name                      String
   email                     String           @unique
   password                  String
   role                      Role             @default(USER)
+  companyId                 Int?
   isActive                  Boolean          @default(true)
   createdAt                 DateTime         @default(now())
   updatedAt                 DateTime         @updatedAt
@@ -49,6 +72,9 @@ model User {
   projectUpdatesBy          Project[]        @relation("ProjectUpdates")
   projectServiceAssignments ProjectService[] @relation("ProjectServiceAssignments")
   projectTimeEntries        ProjectTimeEntry[]
+  payrolls                  Payroll[]
+  
+  company                   Company?         @relation(fields: [companyId], references: [id])
 }
 
 model Profile {
@@ -114,7 +140,9 @@ model Service {
   id           Int       @id @default(autoincrement())
   name         String
   categoryId   Int?
+  companyId    Int?
   category     Category? @relation(fields: [categoryId], references: [id])
+  company      Company?  @relation(fields: [companyId], references: [id])
   description  String?
   price        Float     // Selling price (default)
   cost         Float?    // Cost to provide the service (for profit calculation)
@@ -128,6 +156,7 @@ model Service {
 
   projects     ProjectService[]
   invoiceItems InvoiceItem[]
+  proformaItems ProformaItem[]
   taxId        Int?
   tax          Tax?                   @relation(fields: [taxId], references: [id])
   soldServices SoldService[]
@@ -141,6 +170,7 @@ model Project {
   clientEmail        String?
   clientPhone        String?
   clientId           Int
+  companyId          Int?
   budgetId           Int?
   assignedToId       Int?
   status             ProjectStatus @default(PENDING)
@@ -169,6 +199,7 @@ model Project {
   updatedAt          DateTime      @updatedAt
 
   client            User             @relation("ClientProjects", fields: [clientId], references: [id])
+  company           Company?         @relation("CompanyProjects", fields: [companyId], references: [id])
   budget            Budget?          @relation(fields: [budgetId], references: [id])
   assignedTo        User?            @relation("AssignedProjects", fields: [assignedToId], references: [id])
   lastUpdatedByUser User?            @relation("ProjectUpdates", fields: [lastUpdatedBy], references: [id])
@@ -182,6 +213,7 @@ model Project {
   services          ProjectService[]
   products          ProjectProduct[]
   messages            Message[]
+  proformas         Proforma[]
 }
 
 model Expense {
@@ -253,7 +285,9 @@ model Product {
   id           Int       @id @default(autoincrement())
   name         String
   categoryId   Int?
+  companyId    Int?
   category     Category? @relation(fields: [categoryId], references: [id])
+  company      Company?  @relation(fields: [companyId], references: [id])
   description  String?
   buyingPrice  Float
   sellingPrice Float
@@ -278,6 +312,7 @@ model Product {
 
   projects     ProjectProduct[]
   invoiceItems InvoiceItem[]
+  proformaItems ProformaItem[]
   transactions InventoryTransaction[]
   soldProducts SoldProduct[]
   budgetId     Int?
@@ -738,4 +773,68 @@ model SoldService {
   taxId   Int?
   tax     Tax?      @relation(fields: [taxId], references: [id])
   taxAmount Float   @default(0) // Tax amount collected on this sale
+}
+
+model Payroll {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  amount      Float
+  period      String   // e.g., "2024-01", "2024-Q1"
+  type        String   // "SALARY", "BONUS", "OVERTIME", "DEDUCTION"
+  description String?
+  status      String   @default("PENDING") // "PENDING", "APPROVED", "PAID", "CANCELLED"
+  paymentDate DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee User @relation(fields: [employeeId], references: [id])
+}
+
+model Proforma {
+  id                    Int           @id @default(autoincrement())
+  proformaNumber        String        @unique
+  clientName            String
+  clientEmail           String?
+  clientPhone           String?
+  clientAddress         String?
+  projectId             Int?
+  status                String        @default("DRAFT") // "DRAFT", "SENT", "APPROVED", "CONVERTED", "EXPIRED"
+  subtotal              Float         @default(0)
+  taxRate               Float         @default(0)
+  taxAmount             Float         @default(0)
+  discountAmount        Float         @default(0)
+  discountPercentage    Float         @default(0)
+  shippingAmount        Float         @default(0)
+  total                 Float         @default(0)
+  currency              String        @default("USD")
+  notes                 String?
+  termsAndConditions    String?
+  validUntil            DateTime?
+  issuedAt              DateTime      @default(now())
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  project Project?      @relation(fields: [projectId], references: [id])
+  items   ProformaItem[]
+}
+
+model ProformaItem {
+  id                Int     @id @default(autoincrement())
+  proformaId        Int
+  productId         Int?
+  serviceId         Int?
+  quantity          Int     @default(1)
+  unitPrice         Float
+  discount          Float   @default(0)
+  discountPercentage Float  @default(0)
+  taxRate           Float   @default(0)
+  subtotal          Float   @default(0)
+  totalAfterDiscount Float  @default(0)
+  taxAmount         Float   @default(0)
+  total             Float   @default(0)
+  description       String?
+
+  proforma Proforma @relation(fields: [proformaId], references: [id])
+  product  Product? @relation(fields: [productId], references: [id])
+  service  Service? @relation(fields: [serviceId], references: [id])
 }

@@ -254,7 +254,7 @@ export class PaymentService {
         (sum, payment) => sum + payment.amount,
         0,
       );
-      const remainingAmount = invoice.total - totalPaid;
+      const remainingAmount = (invoice?.total || 0) - totalPaid;
 
       if (amount > remainingAmount) {
         throw new BadRequestException(

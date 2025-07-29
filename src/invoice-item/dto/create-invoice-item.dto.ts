@@ -86,4 +86,79 @@ export class CreateInvoiceItemDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @ApiProperty({
+    description: 'Invoice ID',
+    example: 1,
+  })
+  @IsNumber()
+  @IsPositive()
+  invoiceId: number;
+
+  @ApiPropertyOptional({
+    description: 'Discount amount for this item',
+    example: 10.0,
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  discount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Discount percentage for this item',
+    example: 15,
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  discountPercentage?: number;
+
+  @ApiPropertyOptional({
+    description: 'Tax rate for this item',
+    example: 8.5,
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  taxRate?: number;
+
+  @ApiProperty({
+    description: 'Item subtotal (quantity * unitPrice)',
+    example: 299.97,
+    minimum: 0,
+  })
+  @IsNumber()
+  @IsPositive()
+  subtotal: number;
+
+  @ApiProperty({
+    description: 'Item total after discounts',
+    example: 289.97,
+    minimum: 0,
+  })
+  @IsNumber()
+  @IsPositive()
+  totalAfterDiscount: number;
+
+  @ApiPropertyOptional({
+    description: 'Item tax amount',
+    example: 24.65,
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  taxAmount?: number;
+
+  @ApiProperty({
+    description: 'Item total including tax',
+    example: 314.62,
+    minimum: 0,
+  })
+  @IsNumber()
+  @IsPositive()
+  total: number;
 }
