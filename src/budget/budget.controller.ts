@@ -35,8 +35,8 @@ export class BudgetController {
   @ApiResponse({ status: 201, description: 'Budget created successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   create(@Body() createBudgetDto: CreateBudgetDto, @Request() req) {
-    // Temporarily use a default user ID since auth is commented out
-    const userId = req.user?.userId || 1;
+    // Get user ID from request, or use undefined if not available
+    const userId = req.user?.userId;
     return this.budgetService.create(createBudgetDto, userId);
   }
 
@@ -45,6 +45,13 @@ export class BudgetController {
   @ApiResponse({ status: 200, description: 'List of all budgets' })
   findAll() {
     return this.budgetService.findAll();
+  }
+
+  @Get('stats')
+  @ApiOperation({ summary: 'Get budget statistics' })
+  @ApiResponse({ status: 200, description: 'Budget statistics' })
+  getStats() {
+    return this.budgetService.getBudgetStats();
   }
 
   @Get('check-name/:name')
@@ -80,8 +87,8 @@ export class BudgetController {
     @Body() updateBudgetDto: UpdateBudgetDto,
     @Request() req,
   ) {
-    // Temporarily use a default user ID since auth is commented out
-    const userId = req.user?.userId || 1;
+    // Get user ID from request, or use undefined if not available
+    const userId = req.user?.userId;
     return this.budgetService.update(+id, updateBudgetDto, userId);
   }
 
@@ -91,8 +98,8 @@ export class BudgetController {
   @ApiResponse({ status: 200, description: 'Budget deleted successfully' })
   @ApiResponse({ status: 404, description: 'Budget not found' })
   remove(@Param('id') id: string, @Request() req) {
-    // Temporarily use a default user ID since auth is commented out
-    const userId = req.user?.userId || 1;
+    // Get user ID from request, or use undefined if not available
+    const userId = req.user?.userId;
     return this.budgetService.remove(+id, userId);
   }
 }

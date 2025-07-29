@@ -21,7 +21,7 @@ export class NotificationService {
       data: {
         userId: createNotificationDto.userId,
         content: createNotificationDto.content,
-        type: createNotificationDto.type as any,
+        type: (createNotificationDto.type || NotificationType.INFO) as any,
       },
     });
   }

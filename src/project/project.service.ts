@@ -1163,8 +1163,79 @@ export class ProjectService {
       throw new NotFoundException(`Project with ID ${id} not found`);
     }
 
-    await this.prisma.project.delete({
-      where: { id },
+    // Delete related records first
+    await this.prisma.$transaction(async (prisma) => {
+      // Delete project-related records in the correct order
+      await prisma.projectTimeEntry.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.projectMilestone.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.projectHistory.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.projectUpdate.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.projectService.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.projectProduct.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.expense.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.message.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.proforma.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.task.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.revenue.deleteMany({
+        where: { projectId: id },
+      });
+
+      await prisma.profit.deleteMany({
+        where: { projectId: id },
+      });
+
+      // Delete invoices related to this project
+      const projectInvoices = await prisma.invoice.findMany({
+        where: { projectId: id },
+      });
+
+      for (const invoice of projectInvoices) {
+        await prisma.invoiceItem.deleteMany({
+          where: { invoiceId: invoice.id },
+        });
+        await prisma.payment.deleteMany({
+          where: { invoiceId: invoice.id },
+        });
+      }
+
+      await prisma.invoice.deleteMany({
+        where: { projectId: id },
+      });
+
+      // Finally delete the project
+      await prisma.project.delete({
+        where: { id },
+      });
     });
 
     return { message: 'Project deleted successfully' };

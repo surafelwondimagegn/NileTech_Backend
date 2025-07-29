@@ -36,6 +36,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class ServiceController {
   constructor(private readonly serviceService: ServiceService) {}
 
+  @Get('stats')
+  @ApiOperation({ summary: 'Get service statistics' })
+  @ApiResponse({ status: 200, description: 'Service statistics' })
+  getStats() {
+    return this.serviceService.getServiceStats();
+  }
+
   @Post()
   @ApiOperation({
     summary: 'Create a new service',
@@ -99,73 +106,43 @@ export class ServiceController {
     description:
       'Retrieves all services with their category information and usage statistics',
   })
-  @ApiQuery({
-    name: 'categoryId',
-    required: false,
-    description: 'Filter services by category ID',
-    type: Number,
-  })
-  @ApiQuery({
-    name: 'active',
-    required: false,
-    description: 'Filter only active services',
-    type: Boolean,
-  })
   @ApiResponse({
     status: 200,
-    description: 'Services retrieved successfully',
+    description: 'List of all services',
     type: [Service],
   })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad request - Invalid query parameters',
-  })
-  findAll(
-    @Query('categoryId') categoryId?: string,
-    @Query('active') active?: string,
-  ) {
-    if (categoryId) {
-      return this.serviceService.findByCategory(parseInt(categoryId));
-    }
-    if (active === 'true') {
-      return this.serviceService.findActiveServices();
-    }
+  findAll() {
     return this.serviceService.findAll();
   }
 
   @Get('active')
   @ApiOperation({
-    summary: 'Get active services only',
-    description:
-      'Retrieves only active services, useful for client-facing applications',
+    summary: 'Get active services',
+    description: 'Retrieves all active services',
   })
   @ApiResponse({
     status: 200,
-    description: 'Active services retrieved successfully',
+    description: 'List of active services',
     type: [Service],
   })
   findActiveServices() {
     return this.serviceService.findActiveServices();
   }
 
-  @Get('category/:categoryId')
+  @Get(':categoryId')
   @ApiOperation({
     summary: 'Get services by category',
-    description: 'Retrieves all services belonging to a specific category',
+    description: 'Retrieves all services for a specific category',
   })
   @ApiParam({
     name: 'categoryId',
-    description: 'Category ID to filter services',
-    type: Number,
+    description: 'Category ID',
+    type: 'number',
   })
   @ApiResponse({
     status: 200,
-    description: 'Services by category retrieved successfully',
+    description: 'List of services in the category',
     type: [Service],
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad request - Invalid category ID',
   })
   findByCategory(@Param('categoryId', ParseIntPipe) categoryId: number) {
     return this.serviceService.findByCategory(categoryId);
@@ -174,17 +151,16 @@ export class ServiceController {
   @Get(':id')
   @ApiOperation({
     summary: 'Get a specific service',
-    description:
-      'Retrieves a specific service by ID with detailed information including related projects',
+    description: 'Retrieves a specific service by ID',
   })
   @ApiParam({
     name: 'id',
     description: 'Service ID',
-    type: Number,
+    type: 'number',
   })
   @ApiResponse({
     status: 200,
-    description: 'Service retrieved successfully',
+    description: 'Service found',
     type: Service,
   })
   @ApiResponse({
@@ -202,27 +178,12 @@ export class ServiceController {
   })
   @ApiParam({
     name: 'id',
-    description: 'Service ID to update',
-    type: Number,
+    description: 'Service ID',
+    type: 'number',
   })
   @ApiBody({
     type: UpdateServiceDto,
     description: 'Service update data',
-    examples: {
-      updatePrice: {
-        summary: 'Update Service Price',
-        value: {
-          price: 1800.0,
-          description: 'Updated description with new features',
-        },
-      },
-      deactivate: {
-        summary: 'Deactivate Service',
-        value: {
-          isActive: false,
-        },
-      },
-    },
   })
   @ApiResponse({
     status: 200,
@@ -247,58 +208,42 @@ export class ServiceController {
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a service',
-    description:
-      'Deletes a service. Cannot delete if service is referenced by projects or invoice items.',
+    description: 'Deletes a service by ID',
   })
   @ApiParam({
     name: 'id',
-    description: 'Service ID to delete',
-    type: Number,
+    description: 'Service ID',
+    type: 'number',
   })
   @ApiResponse({
     status: 200,
     description: 'Service deleted successfully',
-    type: Service,
   })
   @ApiResponse({
     status: 404,
     description: 'Service not found',
   })
-  @ApiResponse({
-    status: 409,
-    description:
-      'Conflict - Cannot delete service as it is referenced by other entities',
-  })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.serviceService.remove(id);
   }
 
-  @Get('check/name/:name')
+  @Get('check-name/:name')
   @ApiOperation({
     summary: 'Check if service name exists',
-    description: 'Checks if a service with the given name already exists',
+    description: 'Checks if a service name is already taken',
   })
   @ApiParam({
     name: 'name',
     description: 'Service name to check',
-    type: String,
   })
   @ApiQuery({
     name: 'excludeId',
+    description: 'Service ID to exclude from check',
     required: false,
-    description: 'Exclude this service ID from the check (useful for updates)',
-    type: Number,
   })
   @ApiResponse({
     status: 200,
-    description: 'Name availability check completed',
-    schema: {
-      type: 'object',
-      properties: {
-        exists: { type: 'boolean' },
-        message: { type: 'string' },
-      },
-    },
+    description: 'Name availability status',
   })
   async checkNameExists(
     @Param('name') name: string,
@@ -306,42 +251,33 @@ export class ServiceController {
   ) {
     const exists = await this.serviceService.checkNameExists(
       name,
-      excludeId ? parseInt(excludeId) : undefined,
+      excludeId ? +excludeId : undefined,
     );
     return {
+      name,
       exists,
-      message: exists
-        ? 'Service name already exists'
-        : 'Service name is available',
+      available: !exists,
+      message: exists ? 'Name already taken' : 'Name is available',
     };
   }
 
-  @Get('check/code/:serviceCode')
+  @Get('check-code/:serviceCode')
   @ApiOperation({
     summary: 'Check if service code exists',
-    description: 'Checks if a service with the given code already exists',
+    description: 'Checks if a service code is already taken',
   })
   @ApiParam({
     name: 'serviceCode',
     description: 'Service code to check',
-    type: String,
   })
   @ApiQuery({
     name: 'excludeId',
+    description: 'Service ID to exclude from check',
     required: false,
-    description: 'Exclude this service ID from the check (useful for updates)',
-    type: Number,
   })
   @ApiResponse({
     status: 200,
-    description: 'Code availability check completed',
-    schema: {
-      type: 'object',
-      properties: {
-        exists: { type: 'boolean' },
-        message: { type: 'string' },
-      },
-    },
+    description: 'Service code availability status',
   })
   async checkServiceCodeExists(
     @Param('serviceCode') serviceCode: string,

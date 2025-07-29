@@ -539,6 +539,7 @@ enum NotificationType {
   INFO
   WARNING
   ALERT
+  SUCCESS
 }
 
 model Transaction {

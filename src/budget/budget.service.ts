@@ -18,7 +18,7 @@ export class BudgetService {
     private notificationService: NotificationService,
   ) {}
 
-  async create(createBudgetDto: CreateBudgetDto, userId: number) {
+  async create(createBudgetDto: CreateBudgetDto, userId?: number) {
     try {
       const budget = await this.prisma.budget.create({
         data: createBudgetDto,
@@ -28,24 +28,33 @@ export class BudgetService {
       });
 
       // Create history entry - handle potential user not found error
-      try {
-        await this.budgetHistoryService.createHistoryEntry({
-          budgetId: budget.id,
-          action: 'CREATED',
-          newValue: JSON.stringify(createBudgetDto),
-          changedBy: userId,
-        });
-      } catch (error) {
-        console.warn(`Failed to create budget history entry: ${error.message}`);
-        // Continue without history entry if user doesn't exist
+      if (userId) {
+        try {
+          await this.budgetHistoryService.createHistoryEntry({
+            budgetId: budget.id,
+            action: 'CREATED',
+            newValue: JSON.stringify(createBudgetDto),
+            changedBy: userId,
+          });
+        } catch (error) {
+          console.warn(`Failed to create budget history entry: ${error.message}`);
+          // Continue without history entry if user doesn't exist
+        }
       }
 
-      // Send notification
-      await this.notificationService.notifyBudgetCreated(
-        budget.name,
-        budget.amount,
-        userId,
-      );
+      // Send notification - handle potential notification service error
+      if (userId) {
+        try {
+          await this.notificationService.notifyBudgetCreated(
+            budget.name,
+            budget.amount,
+            userId,
+          );
+        } catch (error) {
+          console.warn(`Failed to send budget creation notification: ${error.message}`);
+          // Continue without notification if service fails
+        }
+      }
 
       return budget;
     } catch (error) {
@@ -131,7 +140,7 @@ export class BudgetService {
     return budget;
   }
 
-  async update(id: number, updateBudgetDto: UpdateBudgetDto, userId: number) {
+  async update(id: number, updateBudgetDto: UpdateBudgetDto, userId?: number) {
     try {
       // Get current budget to compare changes
       const currentBudget = await this.findOne(id);
@@ -147,7 +156,7 @@ export class BudgetService {
       // Determine what changed and create appropriate history entry
       const changes = this.detectChanges(currentBudget, updateBudgetDto);
 
-      if (changes.length > 0) {
+      if (changes.length > 0 && userId) {
         try {
           await this.budgetHistoryService.createHistoryEntry({
             budgetId: budget.id,
@@ -168,11 +177,16 @@ export class BudgetService {
           updateBudgetDto.amount !== undefined &&
           currentBudget.amount !== updateBudgetDto.amount
         ) {
-          await this.notificationService.notifyBudgetUpdated(
-            budget.name,
-            currentBudget.amount,
-            updateBudgetDto.amount,
-          );
+          try {
+            await this.notificationService.notifyBudgetUpdated(
+              budget.name,
+              currentBudget.amount,
+              updateBudgetDto.amount,
+            );
+          } catch (error) {
+            console.warn(`Failed to send budget update notification: ${error.message}`);
+            // Continue without notification if service fails
+          }
         }
       }
 
@@ -208,30 +222,27 @@ export class BudgetService {
     }
   }
 
-  async remove(id: number, userId: number) {
+  async remove(id: number, userId?: number) {
     try {
       // Get current budget before deletion
       const currentBudget = await this.findOne(id);
+
+      // Delete related budget history records first
+      await this.prisma.budgetHistory.deleteMany({
+        where: { budgetId: id },
+      });
 
       const budget = await this.prisma.budget.delete({
         where: { id },
       });
 
-      // Create history entry for deletion
-      try {
-        await this.budgetHistoryService.createHistoryEntry({
-          budgetId: id,
-          action: 'DELETED',
-          oldValue: JSON.stringify(currentBudget),
-          changedBy: userId,
-        });
-      } catch (error) {
-        console.warn(`Failed to create budget history entry: ${error.message}`);
-        // Continue without history entry if user doesn't exist
-      }
-
       // Send notification
-      await this.notificationService.notifyBudgetDeleted(currentBudget.name);
+      try {
+        await this.notificationService.notifyBudgetDeleted(currentBudget.name);
+      } catch (error) {
+        console.warn(`Failed to send budget deletion notification: ${error.message}`);
+        // Continue without notification if service fails
+      }
 
       return budget;
     } catch (error) {
@@ -243,7 +254,7 @@ export class BudgetService {
       if (error.code === 'P2003') {
         // Foreign key constraint violation - budget is referenced by other entities
         throw new ConflictException(
-          'Cannot delete budget as it is referenced by other entities',
+          'Cannot delete budget as it is referenced by other entities. Please remove related records first.',
         );
       }
 
@@ -267,6 +278,25 @@ export class BudgetService {
     });
 
     return !!existingBudget;
+  }
+
+  async getBudgetStats() {
+    const budgets = await this.findAll();
+    
+    const totalBudgets = budgets.length;
+    const totalAmount = budgets.reduce((sum, budget) => sum + budget.amount, 0);
+    const averageAmount = totalBudgets > 0 ? totalAmount / totalBudgets : 0;
+    
+    // Get unique categories
+    const categories = [...new Set(budgets.map(budget => budget.category).filter(Boolean))];
+    
+    return {
+      totalBudgets,
+      totalAmount,
+      averageAmount,
+      categories,
+      budgets
+    };
   }
 
   private detectChanges(currentBudget: any, updateBudgetDto: any): string[] {

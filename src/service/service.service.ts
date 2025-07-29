@@ -449,4 +449,35 @@ export class ServiceService {
 
     return changes;
   }
+
+  async getServiceStats() {
+    const services = await this.findAll();
+    
+    const totalServices = services.length;
+    const activeServices = services.filter(service => service.isActive).length;
+    const totalRevenue = services.reduce((sum, service) => sum + service.price, 0);
+    const averagePrice = totalServices > 0 ? totalRevenue / totalServices : 0;
+    
+    // Get unique categories
+    const categories = [...new Set(services.map(service => service.category?.name).filter(Boolean))];
+    
+    // Get services by category
+    const servicesByCategory = services.reduce((acc, service) => {
+      const categoryName = service.category?.name || 'Uncategorized';
+      if (!acc[categoryName]) {
+        acc[categoryName] = 0;
+      }
+      acc[categoryName]++;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    return {
+      totalServices,
+      activeServices,
+      totalRevenue,
+      averagePrice,
+      categories,
+      servicesByCategory
+    };
+  }
 }
