@@ -29,7 +29,7 @@ import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('Payment Methods')
+@ApiTags('payment-method')
 @ApiBearerAuth('JWT-auth')
 @ApiSecurity('JWT-auth')
 @UseGuards(JwtAuthGuard)

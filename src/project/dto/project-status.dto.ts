@@ -19,7 +19,7 @@ export class StartProjectDto {
   })
   @IsOptional()
   @IsDateString()
-  actualStartDate?: Date;
+  startedAt?: Date;
 
   @ApiProperty({
     description: 'Initial progress percentage',
@@ -53,7 +53,7 @@ export class CompleteProjectDto {
   })
   @IsOptional()
   @IsDateString()
-  actualCompletionDate?: Date;
+  finishedAt?: Date;
 
   @ApiProperty({
     description: 'Client feedback on project completion',
@@ -104,53 +104,27 @@ export class CancelProjectDto {
 
 export class ProjectStatusResponseDto {
   @ApiProperty({
-    description: 'Project ID',
-    example: 1,
-  })
-  id: number;
-
-  @ApiProperty({
-    description: 'Project title',
-    example: 'Website Redesign for Acme Corp',
-  })
-  title: string;
-
-  @ApiProperty({
-    description: 'Current project status',
-    enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
-    example: 'IN_PROGRESS',
-  })
-  status: string;
-
-  @ApiProperty({
-    description: 'Previous status (if status was changed)',
-    example: 'PENDING',
-    required: false,
-  })
-  previousStatus?: string;
-
-  @ApiProperty({
     description: 'Status change message',
     example: 'Project started successfully',
   })
   message: string;
 
   @ApiProperty({
-    description: 'Date when status was changed',
-    example: '2025-07-24T09:00:00.000Z',
+    description: 'Updated project object',
+    type: 'object',
   })
-  statusChangedAt: Date;
+  project?: any;
 
   @ApiProperty({
-    description: 'User who changed the status',
-    example: 'John Doe',
-  })
-  changedBy: string;
-
-  @ApiProperty({
-    description: 'Additional details about the status change',
-    example: 'Team assigned and initial setup completed.',
+    description: 'Previous status (if status was changed)',
+    example: 'PENDING',
     required: false,
   })
-  details?: string;
+  oldStatus?: string;
+
+  @ApiProperty({
+    description: 'New status',
+    example: 'IN_PROGRESS',
+  })
+  newStatus?: string;
 }

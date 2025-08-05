@@ -9,11 +9,21 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { ProjectMilestoneService } from './project-milestone.service';
 import { CreateProjectMilestoneDto } from './dto/create-project-milestone.dto';
 import { UpdateProjectMilestoneDto } from './dto/update-project-milestone.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@ApiTags('project-milestone')
+@ApiBearerAuth('JWT-auth')
+@ApiSecurity('JWT-auth')
 @Controller('project-milestones')
 @UseGuards(JwtAuthGuard)
 export class ProjectMilestoneController {

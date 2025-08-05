@@ -24,7 +24,7 @@ import { ProfileService } from './profile.service';
 import { CreateProfileDto, UpdateProfileDto } from './dto/create-profile.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('profiles')
+@ApiTags('profile')
 @Controller('profiles')
 export class ProfileController {
   constructor(private readonly profileService: ProfileService) {}

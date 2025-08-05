@@ -7,10 +7,20 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { ProjectHistoryService } from './project-history.service';
 import { CreateProjectHistoryDto } from './dto/create-project-history.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@ApiTags('project-history')
+@ApiBearerAuth('JWT-auth')
+@ApiSecurity('JWT-auth')
 @Controller('project-history')
 @UseGuards(JwtAuthGuard)
 export class ProjectHistoryController {

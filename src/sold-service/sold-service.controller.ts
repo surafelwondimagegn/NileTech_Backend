@@ -9,11 +9,21 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { SoldServiceService } from './sold-service.service';
 import { CreateSoldServiceDto } from './dto/create-sold-service.dto';
 import { UpdateSoldServiceDto } from './dto/update-sold-service.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@ApiTags('sold-service')
+@ApiBearerAuth('JWT-auth')
+@ApiSecurity('JWT-auth')
 @Controller('sold-services')
 @UseGuards(JwtAuthGuard)
 export class SoldServiceController {

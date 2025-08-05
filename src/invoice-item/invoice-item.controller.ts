@@ -29,7 +29,7 @@ import { CreateInvoiceItemDto } from './dto/create-invoice-item.dto';
 import { UpdateInvoiceItemDto } from './dto/update-invoice-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('Invoice Items')
+@ApiTags('invoice-item')
 @ApiBearerAuth('JWT-auth')
 @ApiSecurity('JWT-auth')
 @UseGuards(JwtAuthGuard)

@@ -28,7 +28,7 @@ import { UpdateProjectUpdateDto } from './dto/update-project-update.dto';
 import { ProjectUpdate } from './entities/project-update.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('Project Updates')
+@ApiTags('project-update')
 @ApiBearerAuth('JWT-auth')
 @ApiSecurity('JWT-auth')
 @UseGuards(JwtAuthGuard)

@@ -22,7 +22,7 @@ import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('budgets')
+@ApiTags('budget')
 @ApiBearerAuth('JWT-auth')
 @ApiSecurity('JWT-auth')
 @UseGuards(JwtAuthGuard)

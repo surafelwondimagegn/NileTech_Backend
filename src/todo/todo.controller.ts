@@ -27,7 +27,7 @@ import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 import { Todo } from './entities/todo.entity';
 
-@ApiTags('todos')
+@ApiTags('todo')
 @ApiBearerAuth('JWT-auth')
 @ApiSecurity('JWT-auth')
 @UseGuards(JwtAuthGuard)

@@ -10,11 +10,21 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { ProjectTimeEntryService } from './project-time-entry.service';
 import { CreateProjectTimeEntryDto } from './dto/create-project-time-entry.dto';
 import { UpdateProjectTimeEntryDto } from './dto/update-project-time-entry.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@ApiTags('project-time-entry')
+@ApiBearerAuth('JWT-auth')
+@ApiSecurity('JWT-auth')
 @Controller('project-time-entries')
 @UseGuards(JwtAuthGuard)
 export class ProjectTimeEntryController {

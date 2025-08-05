@@ -20,7 +20,7 @@ import {
   ApiSecurity,
 } from '@nestjs/swagger';
 
-@ApiTags('users')
+@ApiTags('user')
 @ApiBearerAuth('JWT-auth')
 @ApiSecurity('JWT-auth')
 @UseGuards(JwtAuthGuard)

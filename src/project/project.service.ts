@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import {
   CreateProjectDto,
   ProjectServiceDto,
@@ -33,7 +34,408 @@ import {
 
 @Injectable()
 export class ProjectService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
+
+  // ==================== NOTIFICATION & ALERT SYSTEM ====================
+
+  private async notifyProjectCreated(project: any, createdBy: number) {
+    const content = `New project "${project.title}" created for ${project.clientName}`;
+    
+    // Notify admins and managers
+    await this.notificationService.createForAdmins(
+      content,
+      'SUCCESS' as any,
+    );
+
+    // Notify assigned user if different from creator
+    if (project.assignedToId && project.assignedToId !== createdBy) {
+      await this.notificationService.createForUser(
+        project.assignedToId,
+        `You have been assigned to project "${project.title}"`,
+        'INFO' as any,
+      );
+    }
+
+    // Notify client
+    if (project.clientId) {
+      await this.notificationService.createForUser(
+        project.clientId,
+        `Your project "${project.title}" has been created and is being processed`,
+        'INFO' as any,
+      );
+    }
+  }
+
+  private async notifyProjectStatusChange(
+    project: any,
+    oldStatus: string,
+    newStatus: string,
+    changedBy: number,
+  ) {
+    const statusMessages = {
+      PENDING: 'is pending approval',
+      IN_PROGRESS: 'has started',
+      COMPLETED: 'has been completed',
+      CANCELLED: 'has been cancelled',
+    };
+
+    const content = `Project "${project.title}" ${statusMessages[newStatus] || `status changed to ${newStatus}`}`;
+
+    // Notify all project stakeholders
+    const stakeholders = [project.clientId, project.assignedToId, changedBy].filter(
+      (id) => id && id !== changedBy,
+    );
+
+    await Promise.all(
+      stakeholders.map((userId) =>
+        this.notificationService.createForUser(userId, content, 'INFO' as any),
+      ),
+    );
+
+    // Notify admins for status changes
+    await this.notificationService.createForAdmins(
+      `Project "${project.title}" status: ${oldStatus} → ${newStatus}`,
+      'INFO' as any,
+    );
+  }
+
+  private async notifyDeadlineAlert(project: any) {
+    const now = new Date();
+    const deadline = new Date(project.deadline);
+    const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    let alertType = 'INFO' as any;
+    let urgency = '';
+
+    if (daysUntilDeadline <= 0) {
+      alertType = 'ALERT' as any;
+      urgency = 'OVERDUE';
+    } else if (daysUntilDeadline <= 1) {
+      alertType = 'WARNING' as any;
+      urgency = 'DUE TOMORROW';
+    } else if (daysUntilDeadline <= 3) {
+      alertType = 'WARNING' as any;
+      urgency = 'DUE SOON';
+    } else if (daysUntilDeadline <= 7) {
+      alertType = 'INFO' as any;
+      urgency = 'UPCOMING';
+    }
+
+    const content = `Project "${project.title}" ${urgency}: ${daysUntilDeadline <= 0 ? 'Overdue' : `Due in ${daysUntilDeadline} day(s)`}`;
+
+    // Notify assigned user
+    if (project.assignedToId) {
+      await this.notificationService.createForUser(
+        project.assignedToId,
+        content,
+        alertType,
+      );
+    }
+
+    // Notify client for overdue projects
+    if (daysUntilDeadline <= 0 && project.clientId) {
+      await this.notificationService.createForUser(
+        project.clientId,
+        `Your project "${project.title}" is overdue. We're working to complete it as soon as possible.`,
+        'WARNING' as any,
+      );
+    }
+
+    // Notify admins for critical deadlines
+    if (daysUntilDeadline <= 3) {
+      await this.notificationService.createForAdmins(
+        `URGENT: Project "${project.title}" ${urgency}`,
+        alertType,
+      );
+    }
+  }
+
+  private async notifyProgressUpdate(project: any, oldProgress: number, newProgress: number, updatedBy: number) {
+    const progressChange = newProgress - oldProgress;
+    
+    if (progressChange > 0) {
+      const content = `Project "${project.title}" progress updated: ${oldProgress}% → ${newProgress}% (+${progressChange}%)`;
+
+      // Notify client for significant progress
+      if (progressChange >= 10 && project.clientId) {
+        await this.notificationService.createForUser(
+          project.clientId,
+          `Great news! Your project "${project.title}" has made significant progress (${newProgress}% complete)`,
+          'SUCCESS' as any,
+        );
+      }
+
+      // Notify assigned user if different from updater
+      if (project.assignedToId && project.assignedToId !== updatedBy) {
+        await this.notificationService.createForUser(
+          project.assignedToId,
+          content,
+          'INFO' as any,
+        );
+      }
+    }
+  }
+
+  private async notifyMilestoneCompleted(project: any, milestone: any, completedBy: number) {
+    const content = `Milestone "${milestone.title}" completed for project "${project.title}"`;
+
+    // Notify all project stakeholders
+    const stakeholders = [project.clientId, project.assignedToId].filter(Boolean);
+
+    await Promise.all(
+      stakeholders.map((userId) =>
+        this.notificationService.createForUser(userId, content, 'SUCCESS' as any),
+      ),
+    );
+
+    // Notify admins
+    await this.notificationService.createForAdmins(content, 'SUCCESS' as any);
+  }
+
+  // Test method for notification system
+  async testNotificationMethods(project: any, userId: number) {
+    await this.notifyProjectCreated(project, userId);
+    await this.notifyProjectStatusChange(project, 'PENDING', 'IN_PROGRESS', userId);
+    await this.notifyDeadlineAlert(project);
+    await this.notifyProgressUpdate(project, 0, 25, userId);
+  }
+
+  private async notifyServiceAdded(project: any, service: any, addedBy: number) {
+    const content = `Service "${service.service.name}" added to project "${project.title}"`;
+
+    // Notify assigned user if different from adder
+    if (project.assignedToId && project.assignedToId !== addedBy) {
+      await this.notificationService.createForUser(
+        project.assignedToId,
+        content,
+        'INFO' as any,
+      );
+    }
+
+    // Notify client
+    if (project.clientId) {
+      await this.notificationService.createForUser(
+        project.clientId,
+        `New service "${service.service.name}" has been added to your project "${project.title}"`,
+        'INFO' as any,
+      );
+    }
+  }
+
+  private async notifyProductAdded(project: any, product: any, addedBy: number) {
+    const content = `Product "${product.product.name}" added to project "${project.title}"`;
+
+    // Notify assigned user if different from adder
+    if (project.assignedToId && project.assignedToId !== addedBy) {
+      await this.notificationService.createForUser(
+        project.assignedToId,
+        content,
+        'INFO' as any,
+      );
+    }
+
+    // Notify client
+    if (project.clientId) {
+      await this.notificationService.createForUser(
+        project.clientId,
+        `New product "${product.product.name}" has been added to your project "${project.title}"`,
+        'INFO' as any,
+      );
+    }
+  }
+
+  private async notifyInvoiceCreated(project: any, invoice: any, createdBy: number) {
+    const content = `Invoice #${invoice.invoiceNumber} created for project "${project.title}" - Total: $${invoice.total}`;
+
+    // Notify client
+    if (project.clientId) {
+      await this.notificationService.createForUser(
+        project.clientId,
+        `Invoice #${invoice.invoiceNumber} has been generated for your project "${project.title}". Amount: $${invoice.total}`,
+        'INFO' as any,
+      );
+    }
+
+    // Notify admins
+    await this.notificationService.createForAdmins(content, 'SUCCESS' as any);
+  }
+
+  private async notifyProformaCreated(project: any, proforma: any, createdBy: number) {
+    const content = `Proforma #${proforma.proformaNumber} created for project "${project.title}" - Total: $${proforma.total}`;
+
+    // Notify client
+    if (project.clientId) {
+      await this.notificationService.createForUser(
+        project.clientId,
+        `Proforma #${proforma.proformaNumber} has been generated for your project "${project.title}". Amount: $${proforma.total}`,
+        'INFO' as any,
+      );
+    }
+
+    // Notify admins
+    await this.notificationService.createForAdmins(content, 'SUCCESS' as any);
+  }
+
+  private async notifyPaymentReceived(project: any, payment: any, receivedBy: number) {
+    const content = `Payment received for project "${project.title}" - Amount: $${payment.amount}`;
+
+    // Notify all project stakeholders
+    const stakeholders = [project.clientId, project.assignedToId].filter(Boolean);
+
+    await Promise.all(
+      stakeholders.map((userId) =>
+        this.notificationService.createForUser(userId, content, 'SUCCESS' as any),
+      ),
+    );
+
+    // Notify admins
+    await this.notificationService.createForAdmins(content, 'SUCCESS' as any);
+  }
+
+  private async notifyBudgetAlert(project: any, budgetUsage: number, budgetLimit: number) {
+    const usagePercentage = (budgetUsage / budgetLimit) * 100;
+    
+    if (usagePercentage >= 90) {
+      const content = `CRITICAL: Project "${project.title}" budget usage at ${usagePercentage.toFixed(1)}% ($${budgetUsage}/${budgetLimit})`;
+
+      // Notify admins and managers
+      await this.notificationService.createForAdmins(content, 'ALERT' as any);
+
+      // Notify assigned user
+      if (project.assignedToId) {
+        await this.notificationService.createForUser(
+          project.assignedToId,
+          `Budget alert: Project "${project.title}" has used ${usagePercentage.toFixed(1)}% of allocated budget`,
+          'WARNING' as any,
+        );
+      }
+    } else if (usagePercentage >= 75) {
+      const content = `Project "${project.title}" budget usage at ${usagePercentage.toFixed(1)}%`;
+
+      // Notify assigned user
+      if (project.assignedToId) {
+        await this.notificationService.createForUser(
+          project.assignedToId,
+          `Budget warning: Project "${project.title}" has used ${usagePercentage.toFixed(1)}% of allocated budget`,
+          'WARNING' as any,
+        );
+      }
+    }
+  }
+
+  private async notifyTimeTrackingAlert(project: any, timeEntry: any, userId: number) {
+    const duration = timeEntry.duration || 0;
+    const hours = Math.floor(duration / 60);
+    const minutes = duration % 60;
+
+    const content = `Time entry logged for project "${project.title}": ${hours}h ${minutes}m`;
+
+    // Notify assigned user if different from time tracker
+    if (project.assignedToId && project.assignedToId !== userId) {
+      await this.notificationService.createForUser(
+        project.assignedToId,
+        content,
+        'INFO' as any,
+      );
+    }
+
+    // Notify admins for long time entries (more than 8 hours)
+    if (hours >= 8) {
+      await this.notificationService.createForAdmins(
+        `Long time entry: ${hours}h ${minutes}m logged for project "${project.title}"`,
+        'WARNING' as any,
+      );
+    }
+  }
+
+  // ==================== AUTOMATIC ALERT SCHEDULER ====================
+
+  async scheduleDeadlineAlerts() {
+    const now = new Date();
+    const upcomingDeadlines = await this.prisma.project.findMany({
+      where: {
+        deadline: {
+          gte: now,
+          lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), // Next 7 days
+        },
+        status: {
+          in: ['PENDING', 'IN_PROGRESS'],
+        },
+      },
+      include: {
+        client: true,
+        assignedTo: true,
+      },
+    });
+
+    for (const project of upcomingDeadlines) {
+      await this.notifyDeadlineAlert(project);
+    }
+
+    return {
+      message: `Deadline alerts processed for ${upcomingDeadlines.length} projects`,
+      projects: upcomingDeadlines.length,
+    };
+  }
+
+  async scheduleBudgetAlerts() {
+    const projects = await this.prisma.project.findMany({
+      where: {
+        budgetId: { not: null },
+        status: {
+          in: ['PENDING', 'IN_PROGRESS'],
+        },
+      },
+      include: {
+        budget: {
+          include: {
+            expenses: true,
+          },
+        },
+        expenses: true,
+      },
+    });
+
+    for (const project of projects) {
+      if (project.budget) {
+        const totalExpenses = project.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+        await this.notifyBudgetAlert(project, totalExpenses, project.budget.amount);
+      }
+    }
+
+    return {
+      message: `Budget alerts processed for ${projects.length} projects`,
+      projects: projects.length,
+    };
+  }
+
+  async scheduleOverdueProjectAlerts() {
+    const now = new Date();
+    const overdueProjects = await this.prisma.project.findMany({
+      where: {
+        deadline: { lt: now },
+        status: {
+          in: ['PENDING', 'IN_PROGRESS'],
+        },
+      },
+      include: {
+        client: true,
+        assignedTo: true,
+      },
+    });
+
+    for (const project of overdueProjects) {
+      await this.notifyDeadlineAlert(project);
+    }
+
+    return {
+      message: `Overdue alerts processed for ${overdueProjects.length} projects`,
+      projects: overdueProjects.length,
+    };
+  }
 
   // ==================== PROJECT CREATION ====================
 
@@ -101,198 +503,33 @@ export class ProjectService {
           internalNotes: createProjectDto.internalNotes,
           isPublic: createProjectDto.isPublic ?? true,
           allowClientUpdates: createProjectDto.allowClientUpdates ?? false,
-          lastUpdatedBy: createdBy,
-          lastActivityAt: new Date(),
+        },
+        include: {
+          client: true,
+          assignedTo: true,
+          budget: true,
         },
       });
-
-      // Create milestones if provided
-      if (
-        createProjectDto.milestones &&
-        createProjectDto.milestones.length > 0
-      ) {
-        await Promise.all(
-          createProjectDto.milestones.map((milestone, index) =>
-            prisma.projectMilestone.create({
-              data: {
-                projectId: newProject.id,
-                title: milestone.title,
-                description: milestone.description,
-                dueDate: milestone.dueDate,
-                order: milestone.order || index + 1,
-              },
-            }),
-          ),
-        );
-      }
-
-      // Create services if provided
-      let createdServices: any[] = [];
-      if (createProjectDto.services && createProjectDto.services.length > 0) {
-        createdServices = await Promise.all(
-          createProjectDto.services.map(async (service) => {
-            let serviceId = service.serviceId;
-
-            // If serviceId is 0, create a new service
-            if (service.serviceId === 0) {
-              if (!service.serviceName || !service.serviceDescription) {
-                throw new BadRequestException(
-                  'Service name and description are required when creating a new service',
-                );
-              }
-
-              const newService = await prisma.service.create({
-                data: {
-                  name: service.serviceName,
-                  description: service.serviceDescription,
-                  price: service.unitPrice || 0,
-                  cost: service.unitCost || 0,
-                  isActive: true,
-                },
-              });
-              serviceId = newService.id;
-            } else {
-              // Verify existing service exists
-              const existingService = await prisma.service.findUnique({
-                where: { id: service.serviceId },
-              });
-              if (!existingService) {
-                throw new NotFoundException(
-                  `Service with ID ${service.serviceId} not found`,
-                );
-              }
-            }
-
-            return prisma.projectService.create({
-              data: {
-                projectId: newProject.id,
-                serviceId: serviceId,
-                quantity: service.quantity,
-                unitPrice: service.unitPrice,
-                unitCost: service.unitCost,
-                discount: service.discount || 0,
-                status: service.status || 'PENDING',
-                startDate: service.startDate,
-                endDate: service.endDate,
-                assignedTo: service.assignedTo,
-                notes: service.notes,
-              },
-              include: {
-                service: true,
-                assignedToUser: true,
-              },
-            });
-          }),
-        );
-      }
-
-      // Create products if provided
-      let createdProducts: any[] = [];
-      if (createProjectDto.products && createProjectDto.products.length > 0) {
-        createdProducts = await Promise.all(
-          createProjectDto.products.map(async (product) => {
-            let productId = product.productId;
-
-            // If productId is 0, create a new product
-            if (product.productId === 0) {
-              if (!product.productName || !product.productDescription) {
-                throw new BadRequestException(
-                  'Product name and description are required when creating a new product',
-                );
-              }
-
-              const newProduct = await prisma.product.create({
-                data: {
-                  name: product.productName,
-                  description: product.productDescription,
-                  buyingPrice: product.unitCost || 0,
-                  sellingPrice: product.unitPrice || 0,
-                  stock: 0,
-                  isActive: true,
-                },
-              });
-              productId = newProduct.id;
-            } else {
-              // Verify existing product exists
-              const existingProduct = await prisma.product.findUnique({
-                where: { id: product.productId },
-              });
-              if (!existingProduct) {
-                throw new NotFoundException(
-                  `Product with ID ${product.productId} not found`,
-                );
-              }
-            }
-
-            return prisma.projectProduct.create({
-              data: {
-                projectId: newProject.id,
-                productId: productId,
-                quantity: product.quantity,
-                unitPrice: product.unitPrice,
-                unitCost: product.unitCost,
-                discount: product.discount || 0,
-                status: product.status || 'PENDING',
-                orderDate: product.orderDate,
-                receivedDate: product.receivedDate,
-                installedDate: product.installedDate,
-                notes: product.notes,
-              },
-              include: {
-                product: true,
-              },
-            });
-          }),
-        );
-      }
-
-      // Create automatic invoice if services or products are provided
-      let invoice: any = null;
-      let invoiceItems: any[] = [];
-      if (
-        (createProjectDto.services && createProjectDto.services.length > 0) ||
-        (createProjectDto.products && createProjectDto.products.length > 0)
-      ) {
-        invoice = await this.createProjectInvoiceWithPrisma(
-          prisma,
-          newProject.id,
-          createdBy,
-          createProjectDto.invoiceNotes,
-        );
-
-        // Get the created invoice items
-        invoiceItems = await prisma.invoiceItem.findMany({
-          where: { invoiceId: invoice.id },
-          include: {
-            service: true,
-            product: true,
-          },
-        });
-      }
 
       // Create project history entry
       await prisma.projectHistory.create({
         data: {
           projectId: newProject.id,
-          action: 'CREATED',
+          action: 'PROJECT_CREATED',
           details: JSON.stringify({
-            servicesCount: createProjectDto.services?.length || 0,
-            productsCount: createProjectDto.products?.length || 0,
-            milestonesCount: createProjectDto.milestones?.length || 0,
-            invoiceCreated: !!invoice,
-            invoiceId: invoice?.id,
+            title: newProject.title,
+            clientName: newProject.clientName,
+            status: newProject.status,
+            priority: newProject.priority,
           }),
           createdBy: createdBy,
         },
       });
 
-      return { 
-        project: newProject, 
-        invoice,
-        services: createdServices,
-        products: createdProducts,
-        invoiceItems: invoiceItems,
-      };
+      // Send notifications
+      await this.notifyProjectCreated(newProject, createdBy);
+
+      return newProject;
     });
 
     return result;
@@ -407,7 +644,7 @@ export class ProjectService {
               }
             }
 
-            return prisma.projectService.create({
+            const projectService = await prisma.projectService.create({
               data: {
                 projectId: newProject.id,
                 serviceId: serviceId,
@@ -423,9 +660,10 @@ export class ProjectService {
               },
               include: {
                 service: true,
-                assignedToUser: true,
               },
             });
+            await this.notifyServiceAdded(newProject, projectService, createdBy);
+            return projectService;
           }),
         );
       }
@@ -468,7 +706,7 @@ export class ProjectService {
               }
             }
 
-            return prisma.projectProduct.create({
+            const projectProduct = await prisma.projectProduct.create({
               data: {
                 projectId: newProject.id,
                 productId: productId,
@@ -486,8 +724,34 @@ export class ProjectService {
                 product: true,
               },
             });
+            await this.notifyProductAdded(newProject, projectProduct, createdBy);
+            return projectProduct;
           }),
         );
+      }
+
+      // Create automatic invoice if services or products are provided
+      let invoice: any = null;
+      let invoiceItems: any[] = [];
+      if (
+        (createProjectDto.services && createProjectDto.services.length > 0) ||
+        (createProjectDto.products && createProjectDto.products.length > 0)
+      ) {
+        invoice = await this.createProjectInvoice(
+          newProject.id,
+          createdBy,
+          createProjectDto.notes,
+        );
+
+        // Get the created invoice items
+        invoiceItems = await prisma.invoiceItem.findMany({
+          where: { invoiceId: invoice.id },
+          include: {
+            service: true,
+            product: true,
+          },
+        });
+        await this.notifyInvoiceCreated(newProject, invoice, createdBy);
       }
 
       // Create project history entry
@@ -499,16 +763,19 @@ export class ProjectService {
             servicesCount: createProjectDto.services?.length || 0,
             productsCount: createProjectDto.products?.length || 0,
             milestonesCount: createProjectDto.milestones?.length || 0,
-            invoiceCreated: false,
+            invoiceCreated: !!invoice,
+            invoiceId: invoice?.id,
           }),
           createdBy: createdBy,
         },
       });
 
       return { 
-        project: newProject,
+        project: newProject, 
+        invoice,
         services: createdServices,
         products: createdProducts,
+        invoiceItems: invoiceItems,
       };
     });
 
@@ -566,6 +833,8 @@ export class ProjectService {
       },
     });
 
+    await this.notifyProgressUpdate(project, oldProgress, newProgress, updatedBy);
+
     return this.getProjectTracking(projectId);
   }
 
@@ -622,6 +891,8 @@ export class ProjectService {
       },
     });
 
+    await this.notifyTimeTrackingAlert(project, timeEntry, userId);
+
     return this.mapTimeEntryToResponse(timeEntry);
   }
 
@@ -647,7 +918,7 @@ export class ProjectService {
       );
     }
 
-    const endTime = stopTimeEntryDto.endTime || new Date();
+    const endTime = stopTimeEntryDto.endTime ? new Date(stopTimeEntryDto.endTime) : new Date();
     const duration = Math.round(
       (endTime.getTime() - activeEntry.startTime.getTime()) / (1000 * 60),
     ); // Duration in minutes
@@ -690,6 +961,15 @@ export class ProjectService {
         createdBy: userId,
       },
     });
+
+    // Get project for notification
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    
+    if (project) {
+      await this.notifyTimeTrackingAlert(project, updatedEntry, userId);
+    }
 
     return this.mapTimeEntryToResponse(updatedEntry);
   }
@@ -755,6 +1035,8 @@ export class ProjectService {
         createdBy: userId,
       },
     });
+
+    await this.notifyTimeTrackingAlert(project, timeEntry, userId);
 
     return this.mapTimeEntryToResponse(timeEntry);
   }
@@ -1277,7 +1559,10 @@ export class ProjectService {
   ): Promise<ProjectStatusResponseDto> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      include: { assignedTo: true },
+      include: {
+        client: true,
+        assignedTo: true,
+      },
     });
 
     if (!project) {
@@ -1286,49 +1571,45 @@ export class ProjectService {
 
     if (project.status !== 'PENDING') {
       throw new BadRequestException(
-        `Project is already ${project.status.toLowerCase()}`,
+        `Project is not in PENDING status. Current status: ${project.status}`,
       );
     }
 
-    const startDate = startProjectDto.actualStartDate || new Date();
-    const initialProgress = startProjectDto.initialProgress || 5;
-
+    const oldStatus = project.status;
     const updatedProject = await this.prisma.project.update({
       where: { id: projectId },
       data: {
         status: 'IN_PROGRESS',
-        startedAt: startDate,
-        progress: initialProgress,
-        lastActivityAt: new Date(),
-        lastUpdatedBy: startedBy,
+        startedAt: startProjectDto.startedAt || new Date(),
+        notes: startProjectDto.notes || project.notes,
+      },
+      include: {
+        client: true,
+        assignedTo: true,
       },
     });
 
-    // Create history entry
+    // Create project history entry
     await this.prisma.projectHistory.create({
       data: {
         projectId: projectId,
-        action: 'STATUS_CHANGED',
-        oldValue: 'PENDING',
-        newValue: 'IN_PROGRESS',
+        action: 'PROJECT_STARTED',
         details: JSON.stringify({
+          startedAt: updatedProject.startedAt,
           notes: startProjectDto.notes,
-          startDate: startDate,
-          initialProgress: initialProgress,
         }),
         createdBy: startedBy,
       },
     });
 
+    // Send notifications
+    await this.notifyProjectStatusChange(updatedProject, oldStatus, 'IN_PROGRESS', startedBy);
+
     return {
-      id: updatedProject.id,
-      title: updatedProject.title,
-      status: updatedProject.status,
-      previousStatus: 'PENDING',
       message: 'Project started successfully',
-      statusChangedAt: new Date(),
-      changedBy: project.assignedTo?.name || 'System',
-      details: startProjectDto.notes,
+      project: updatedProject,
+      oldStatus,
+      newStatus: 'IN_PROGRESS',
     };
   }
 
@@ -1339,64 +1620,126 @@ export class ProjectService {
   ): Promise<ProjectStatusResponseDto> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      include: { assignedTo: true },
+      include: {
+        client: true,
+        assignedTo: true,
+      },
     });
 
     if (!project) {
       throw new NotFoundException(`Project with ID ${projectId} not found`);
     }
 
-    if (project.status === 'COMPLETED') {
-      throw new BadRequestException('Project is already completed');
+    if (project.status !== 'IN_PROGRESS') {
+      throw new BadRequestException(
+        `Project is not in progress. Current status: ${project.status}`,
+      );
     }
 
-    if (project.status === 'CANCELLED') {
-      throw new BadRequestException('Cannot complete a cancelled project');
-    }
-
-    const completionDate =
-      completeProjectDto.actualCompletionDate || new Date();
-
+    const oldStatus = project.status;
     const updatedProject = await this.prisma.project.update({
       where: { id: projectId },
       data: {
         status: 'COMPLETED',
-        finishedAt: completionDate,
+        finishedAt: completeProjectDto.finishedAt || new Date(),
         progress: 100,
-        actualHours: completeProjectDto.actualHours,
-        clientFeedback: completeProjectDto.clientFeedback,
-        lastActivityAt: new Date(),
-        lastUpdatedBy: completedBy,
+        notes: completeProjectDto.notes || project.notes,
+        clientFeedback: completeProjectDto.clientFeedback || project.clientFeedback,
+      },
+      include: {
+        client: true,
+        assignedTo: true,
       },
     });
 
-    // Create history entry
+    // Create project history entry
     await this.prisma.projectHistory.create({
       data: {
         projectId: projectId,
-        action: 'STATUS_CHANGED',
-        oldValue: project.status,
-        newValue: 'COMPLETED',
+        action: 'PROJECT_COMPLETED',
         details: JSON.stringify({
+          finishedAt: updatedProject.finishedAt,
           notes: completeProjectDto.notes,
-          completionDate: completionDate,
-          actualHours: completeProjectDto.actualHours,
           clientFeedback: completeProjectDto.clientFeedback,
         }),
         createdBy: completedBy,
       },
     });
 
+    // Capture revenue from project services and products
+    const projectWithItems = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        services: {
+          include: { service: true },
+        },
+        products: {
+          include: { product: true },
+        },
+      },
+    });
+
+    if (!projectWithItems) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    const revenueResults: any[] = [];
+
+    // Capture revenue from services
+    for (const projectService of projectWithItems.services) {
+      try {
+        const serviceRevenue = await this.createRevenueFromSoldService(
+          projectService.serviceId,
+          projectService.quantity,
+          projectService.unitPrice || projectService.service.price,
+          projectWithItems.clientName,
+          projectWithItems.clientEmail || undefined,
+          projectWithItems.clientPhone || undefined,
+          `Revenue from completed project: ${projectWithItems.title}`,
+        );
+        revenueResults.push({
+          type: 'service',
+          serviceName: projectService.service.name,
+          revenue: serviceRevenue,
+        });
+      } catch (error) {
+        console.error(`Failed to capture revenue for service ${projectService.serviceId}:`, error);
+      }
+    }
+
+    // Capture revenue from products
+    for (const projectProduct of projectWithItems.products) {
+      try {
+        const productRevenue = await this.createRevenueFromSoldProduct(
+          projectProduct.productId,
+          projectProduct.quantity,
+          projectProduct.unitPrice || projectProduct.product.sellingPrice,
+          projectWithItems.clientName,
+          projectWithItems.clientEmail || undefined,
+          projectWithItems.clientPhone || undefined,
+          `Revenue from completed project: ${projectWithItems.title}`,
+        );
+        revenueResults.push({
+          type: 'product',
+          productName: projectProduct.product.name,
+          revenue: productRevenue,
+        });
+      } catch (error) {
+        console.error(`Failed to capture revenue for product ${projectProduct.productId}:`, error);
+      }
+    }
+
+    // Send notifications
+    await this.notifyProjectStatusChange(updatedProject, oldStatus, 'COMPLETED', completedBy);
+
     return {
-      id: updatedProject.id,
-      title: updatedProject.title,
-      status: updatedProject.status,
-      previousStatus: project.status,
       message: 'Project completed successfully',
-      statusChangedAt: new Date(),
-      changedBy: project.assignedTo?.name || 'System',
-      details: completeProjectDto.notes,
-    };
+      project: updatedProject,
+      oldStatus,
+      newStatus: 'COMPLETED',
+      revenueCaptured: revenueResults.length > 0,
+      revenueResults,
+    } as any;
   }
 
   async cancelProject(
@@ -1406,7 +1749,10 @@ export class ProjectService {
   ): Promise<ProjectStatusResponseDto> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      include: { assignedTo: true },
+      include: {
+        client: true,
+        assignedTo: true,
+      },
     });
 
     if (!project) {
@@ -1417,49 +1763,40 @@ export class ProjectService {
       throw new BadRequestException('Cannot cancel a completed project');
     }
 
-    if (project.status === 'CANCELLED') {
-      throw new BadRequestException('Project is already cancelled');
-    }
-
-    const cancellationDate = cancelProjectDto.cancellationDate || new Date();
-
+    const oldStatus = project.status;
     const updatedProject = await this.prisma.project.update({
       where: { id: projectId },
       data: {
         status: 'CANCELLED',
-        notes: project.notes
-          ? `${project.notes}\n\nCancellation: ${cancelProjectDto.reason}`
-          : `Cancellation: ${cancelProjectDto.reason}`,
-        lastActivityAt: new Date(),
-        lastUpdatedBy: cancelledBy,
+        notes: cancelProjectDto.notes || project.notes,
+      },
+      include: {
+        client: true,
+        assignedTo: true,
       },
     });
 
-    // Create history entry
+    // Create project history entry
     await this.prisma.projectHistory.create({
       data: {
         projectId: projectId,
-        action: 'STATUS_CHANGED',
-        oldValue: project.status,
-        newValue: 'CANCELLED',
+        action: 'PROJECT_CANCELLED',
         details: JSON.stringify({
           reason: cancelProjectDto.reason,
           notes: cancelProjectDto.notes,
-          cancellationDate: cancellationDate,
         }),
         createdBy: cancelledBy,
       },
     });
 
+    // Send notifications
+    await this.notifyProjectStatusChange(updatedProject, oldStatus, 'CANCELLED', cancelledBy);
+
     return {
-      id: updatedProject.id,
-      title: updatedProject.title,
-      status: updatedProject.status,
-      previousStatus: project.status,
       message: 'Project cancelled successfully',
-      statusChangedAt: new Date(),
-      changedBy: project.assignedTo?.name || 'System',
-      details: cancelProjectDto.reason,
+      project: updatedProject,
+      oldStatus,
+      newStatus: 'CANCELLED',
     };
   }
 
@@ -1473,6 +1810,10 @@ export class ProjectService {
     // Verify project exists
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
+      include: {
+        client: true,
+        assignedTo: true,
+      },
     });
 
     if (!project) {
@@ -1562,6 +1903,9 @@ export class ProjectService {
       },
     });
 
+    // Send notifications
+    await this.notifyServiceAdded(project, projectService, addedBy);
+
     return {
       message: 'Service added to project successfully',
       projectService,
@@ -1576,6 +1920,10 @@ export class ProjectService {
     // Verify project exists
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
+      include: {
+        client: true,
+        assignedTo: true,
+      },
     });
 
     if (!project) {
@@ -1602,9 +1950,9 @@ export class ProjectService {
 
     // If productId is 0, create a new product
     if (productDto.productId === 0) {
-      if (!productDto.productName || !productDto.productDescription) {
+      if (!productDto.productName) {
         throw new BadRequestException(
-          'Product name and description are required when creating a new product',
+          'Product name is required when creating a new product',
         );
       }
 
@@ -1614,7 +1962,7 @@ export class ProjectService {
           description: productDto.productDescription,
           buyingPrice: productDto.unitCost || 0,
           sellingPrice: productDto.unitPrice || 0,
-          stock: 0,
+          stock: productDto.quantity || 0,
           isActive: true,
         },
       });
@@ -1642,8 +1990,6 @@ export class ProjectService {
         discount: productDto.discount || 0,
         status: productDto.status || 'PENDING',
         orderDate: productDto.orderDate,
-        receivedDate: productDto.receivedDate,
-        installedDate: productDto.installedDate,
         notes: productDto.notes,
       },
       include: {
@@ -1665,6 +2011,9 @@ export class ProjectService {
         createdBy: addedBy,
       },
     });
+
+    // Send notifications
+    await this.notifyProductAdded(project, projectProduct, addedBy);
 
     return {
       message: 'Product added to project successfully',
@@ -1784,16 +2133,32 @@ export class ProjectService {
       ),
     );
 
+    // Create project history entry
+    await this.prisma.projectHistory.create({
+      data: {
+        projectId: projectId,
+        action: 'INVOICE_CREATED',
+        details: JSON.stringify({
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          total: invoice.total,
+        }),
+        createdBy: createdBy,
+      },
+    });
+
+    // Send notifications
+    await this.notifyInvoiceCreated(project, invoice, createdBy);
+
     return invoice;
   }
 
-  async createProjectInvoiceWithPrisma(
-    prisma: any,
+  async createProjectProforma(
     projectId: number,
     createdBy: number,
     notes?: string,
   ) {
-    const project = await prisma.project.findUnique({
+    const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       include: {
         client: true,
@@ -1810,13 +2175,13 @@ export class ProjectService {
       throw new NotFoundException(`Project with ID ${projectId} not found`);
     }
 
-    // Calculate invoice totals
+    // Calculate proforma totals
     let subtotal = 0;
-    const invoiceItems: any[] = [];
+    const proformaItems: any[] = [];
 
-    // Add services to invoice
+    // Add services to proforma
     for (const projectService of project.services) {
-      const serviceDetails = await prisma.service.findUnique({
+      const serviceDetails = await this.prisma.service.findUnique({
         where: { id: projectService.serviceId },
       });
 
@@ -1833,7 +2198,7 @@ export class ProjectService {
 
       const serviceDescription = `${projectService.service.name}${projectService.service.serviceCode ? ` (${projectService.service.serviceCode})` : ''}${projectService.notes ? ` - ${projectService.notes}` : ''}`;
 
-      invoiceItems.push({
+      proformaItems.push({
         serviceId: projectService.serviceId,
         quantity: projectService.quantity,
         unitPrice: unitPrice,
@@ -1841,9 +2206,9 @@ export class ProjectService {
       });
     }
 
-    // Add products to invoice
+    // Add products to proforma
     for (const projectProduct of project.products) {
-      const productDetails = await prisma.product.findUnique({
+      const productDetails = await this.prisma.product.findUnique({
         where: { id: projectProduct.productId },
       });
 
@@ -1860,7 +2225,7 @@ export class ProjectService {
 
       const productDescription = `${projectProduct.product.name}${projectProduct.product.sku ? ` (SKU: ${projectProduct.product.sku})` : ''}${projectProduct.notes ? ` - ${projectProduct.notes}` : ''}`;
 
-      invoiceItems.push({
+      proformaItems.push({
         productId: projectProduct.productId,
         quantity: projectProduct.quantity,
         unitPrice: unitPrice,
@@ -1868,9 +2233,18 @@ export class ProjectService {
       });
     }
 
-    // Create invoice
-    const invoice = await prisma.invoice.create({
+    // Generate proforma number
+    const lastProforma = await this.prisma.proforma.findFirst({
+      orderBy: { proformaNumber: 'desc' },
+    });
+    const proformaNumber = lastProforma
+      ? parseInt(lastProforma.proformaNumber) + 1
+      : 1;
+
+    // Create proforma
+    const proforma = await this.prisma.proforma.create({
       data: {
+        proformaNumber: proformaNumber.toString().padStart(6, '0'),
         clientName: project.clientName,
         clientEmail: project.clientEmail,
         clientPhone: project.clientPhone,
@@ -1879,15 +2253,16 @@ export class ProjectService {
         total: subtotal,
         notes: notes,
         issuedAt: new Date(),
+        validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       },
     });
 
-    // Create invoice items
+    // Create proforma items
     await Promise.all(
-      invoiceItems.map((item) =>
-        prisma.invoiceItem.create({
+      proformaItems.map((item) =>
+        this.prisma.proformaItem.create({
           data: {
-            invoiceId: invoice.id,
+            proformaId: proforma.id,
             serviceId: item.serviceId,
             productId: item.productId,
             quantity: item.quantity,
@@ -1898,7 +2273,442 @@ export class ProjectService {
       ),
     );
 
-    return invoice;
+    // Create project history entry
+    await this.prisma.projectHistory.create({
+      data: {
+        projectId: projectId,
+        action: 'PROFORMA_CREATED',
+        details: JSON.stringify({
+          proformaId: proforma.id,
+          proformaNumber: proforma.proformaNumber,
+          total: proforma.total,
+        }),
+        createdBy: createdBy,
+      },
+    });
+
+    // Send notifications
+    await this.notifyProformaCreated(project, proforma, createdBy);
+
+    return proforma;
+  }
+
+  // ==================== REVENUE MANAGEMENT ====================
+
+  async createRevenueFromInvoice(
+    invoiceId: number,
+    amount: number,
+    receivedAt: Date = new Date(),
+  ) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        project: true,
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(`Invoice with ID ${invoiceId} not found`);
+    }
+
+    // Create revenue record
+    const revenue = await this.prisma.revenue.create({
+      data: {
+        projectId: invoice.projectId,
+        invoiceId: invoiceId,
+        amount: amount,
+        receivedAt: receivedAt,
+      },
+    });
+
+    // Create project history entry
+    if (invoice.projectId) {
+      await this.prisma.projectHistory.create({
+        data: {
+          projectId: invoice.projectId,
+          action: 'REVENUE_RECEIVED',
+          details: JSON.stringify({
+            invoiceId: invoiceId,
+            amount: amount,
+            revenueId: revenue.id,
+          }),
+          createdBy: 1, // System user
+        },
+      });
+    }
+
+    await this.notifyPaymentReceived(invoice.project, revenue, 1); // Assuming 1 is system user
+
+    return revenue;
+  }
+
+  async createRevenueFromSoldService(
+    serviceId: number,
+    quantity: number,
+    sellingPrice: number,
+    customerName?: string,
+    customerEmail?: string,
+    customerPhone?: string,
+    notes?: string,
+  ) {
+    // Create sold service record
+    const soldService = await this.prisma.soldService.create({
+      data: {
+        serviceId: serviceId,
+        quantity: quantity,
+        sellingPrice: sellingPrice,
+        cost: 0, // Will be calculated from service cost
+        totalRevenue: quantity * sellingPrice,
+        totalProfit: 0, // Will be calculated
+        customerName: customerName,
+        customerEmail: customerEmail,
+        customerPhone: customerPhone,
+        notes: notes,
+      },
+    });
+
+    // Get service cost for profit calculation
+    const service = await this.prisma.service.findUnique({
+      where: { id: serviceId },
+    });
+
+    if (service && service.cost) {
+      const totalCost = quantity * service.cost;
+      const totalProfit = soldService.totalRevenue - totalCost;
+
+      // Update sold service with cost and profit
+      await this.prisma.soldService.update({
+        where: { id: soldService.id },
+        data: {
+          cost: service.cost,
+          totalProfit: totalProfit,
+        },
+      });
+    }
+
+    // Create revenue record
+    const revenue = await this.prisma.revenue.create({
+      data: {
+        soldServiceId: soldService.id,
+        amount: soldService.totalRevenue,
+      },
+    });
+
+    // Revenue notification handled by the notification service
+
+    return { soldService, revenue };
+  }
+
+  async createRevenueFromSoldProduct(
+    productId: number,
+    quantity: number,
+    sellingPrice: number,
+    customerName?: string,
+    customerEmail?: string,
+    customerPhone?: string,
+    notes?: string,
+  ) {
+    // Get product details for cost calculation
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+    });
+
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${productId} not found`);
+    }
+
+    // Check stock availability
+    if (product.stock < quantity) {
+      throw new BadRequestException(
+        `Insufficient stock. Available: ${product.stock}, Requested: ${quantity}`,
+      );
+    }
+
+    // Create sold product record
+    const soldProduct = await this.prisma.soldProduct.create({
+      data: {
+        productId: productId,
+        quantity: quantity,
+        sellingPrice: sellingPrice,
+        buyingPrice: product.buyingPrice,
+        totalRevenue: quantity * sellingPrice,
+        totalProfit: quantity * (sellingPrice - product.buyingPrice),
+        customerName: customerName,
+        customerEmail: customerEmail,
+        customerPhone: customerPhone,
+        notes: notes,
+      },
+    });
+
+    // Update product stock
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: {
+        stock: product.stock - quantity,
+      },
+    });
+
+    // Create inventory transaction
+    await this.prisma.inventoryTransaction.create({
+      data: {
+        productId: productId,
+        quantity: quantity,
+        transactionType: 'OUTGOING',
+        note: `Sold to ${customerName || 'Customer'}`,
+      },
+    });
+
+    // Create revenue record
+    const revenue = await this.prisma.revenue.create({
+      data: {
+        soldProductId: soldProduct.id,
+        amount: soldProduct.totalRevenue,
+      },
+    });
+
+    // Revenue notification handled by the notification service
+
+    return { soldProduct, revenue };
+  }
+
+  // ==================== EXPENSE MANAGEMENT ====================
+
+  async createProjectExpense(
+    projectId: number,
+    amount: number,
+    note: string,
+    fundingSource: 'BUDGET' | 'PROFIT' = 'BUDGET',
+    budgetId?: number,
+  ) {
+    // Verify project exists
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    // Validate budget if using budget funding
+    if (fundingSource === 'BUDGET' && budgetId) {
+      const budget = await this.prisma.budget.findUnique({
+        where: { id: budgetId },
+        include: {
+          expenses: {
+            where: {
+              fundingSource: 'BUDGET',
+            },
+          },
+        },
+      });
+
+      if (!budget) {
+        throw new NotFoundException(`Budget with ID ${budgetId} not found`);
+      }
+
+      const totalExpenses = budget.expenses.reduce(
+        (sum, expense) => sum + expense.amount,
+        0,
+      );
+      const availableFunds = budget.amount - totalExpenses;
+
+      if (availableFunds < amount) {
+        throw new BadRequestException(
+          `Insufficient budget funds. Available: $${availableFunds.toFixed(2)}, Required: $${amount.toFixed(2)}`,
+        );
+      }
+    }
+
+    // Create expense
+    const expense = await this.prisma.expense.create({
+      data: {
+        projectId: projectId,
+        budgetId: budgetId,
+        amount: amount,
+        note: note,
+        fundingSource: fundingSource,
+      },
+    });
+
+    // Create project history entry
+    await this.prisma.projectHistory.create({
+      data: {
+        projectId: projectId,
+        action: 'EXPENSE_ADDED',
+        details: JSON.stringify({
+          expenseId: expense.id,
+          amount: amount,
+          note: note,
+          fundingSource: fundingSource,
+        }),
+        createdBy: 1, // System user
+      },
+    });
+
+    return expense;
+  }
+
+  // ==================== PROFIT CALCULATION ====================
+
+  async calculateProjectProfit(projectId: number) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        services: {
+          include: { service: true },
+        },
+        products: {
+          include: { product: true },
+        },
+        Revenue: true,
+        expenses: true,
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    let totalRevenue = 0;
+    let totalCost = 0;
+    let totalExpenses = 0;
+
+    // Calculate revenue from project
+    project.Revenue.forEach((revenue) => {
+      totalRevenue += revenue.amount;
+    });
+
+    // Calculate costs from services
+    project.services.forEach((projectService) => {
+      const unitCost = projectService.unitCost || projectService.service?.cost || 0;
+      const quantity = projectService.quantity || 1;
+      totalCost += unitCost * quantity;
+    });
+
+    // Calculate costs from products
+    project.products.forEach((projectProduct) => {
+      const unitCost = projectProduct.unitCost || projectProduct.product?.buyingPrice || 0;
+      const quantity = projectProduct.quantity || 1;
+      totalCost += unitCost * quantity;
+    });
+
+    // Calculate expenses
+    project.expenses.forEach((expense) => {
+      totalExpenses += expense.amount;
+    });
+
+    const grossProfit = totalRevenue - totalCost;
+    const netProfit = grossProfit - totalExpenses;
+
+    // Create or update profit record
+    const existingProfit = await this.prisma.profit.findFirst({
+      where: { projectId: projectId },
+    });
+
+    if (existingProfit) {
+      await this.prisma.profit.update({
+        where: { id: existingProfit.id },
+        data: {
+          amount: netProfit,
+          calculatedAt: new Date(),
+        },
+      });
+    } else {
+      await this.prisma.profit.create({
+        data: {
+          projectId: projectId,
+          amount: netProfit,
+        },
+      });
+    }
+
+    return {
+      totalRevenue,
+      totalCost,
+      totalExpenses,
+      grossProfit,
+      netProfit,
+    };
+  }
+
+  // ==================== PROJECT FINANCIAL SUMMARY ====================
+
+  async getProjectFinancialSummary(projectId: number) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        services: {
+          include: { service: true },
+        },
+        products: {
+          include: { product: true },
+        },
+        Revenue: true,
+        expenses: true,
+        Profit: true,
+        invoices: {
+          include: {
+            Payment: true,
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    // Calculate totals
+    const totalServicesValue = project.services.reduce((sum, ps) => {
+      const unitPrice = ps.unitPrice || ps.service?.price || 0;
+      const quantity = ps.quantity || 1;
+      const discount = ps.discount || 0;
+      return sum + (unitPrice * quantity - discount);
+    }, 0);
+
+    const totalProductsValue = project.products.reduce((sum, pp) => {
+      const unitPrice = pp.unitPrice || pp.product?.sellingPrice || 0;
+      const quantity = pp.quantity || 1;
+      const discount = pp.discount || 0;
+      return sum + (unitPrice * quantity - discount);
+    }, 0);
+
+    const totalRevenue = project.Revenue.reduce((sum, r) => sum + r.amount, 0);
+    const totalExpenses = project.expenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalProfit = project.Profit.length > 0 ? project.Profit[0].amount : 0;
+
+    const paidInvoices = project.invoices.filter(invoice => 
+      invoice.Payment.length > 0
+    );
+    const unpaidInvoices = project.invoices.filter(invoice => 
+      invoice.Payment.length === 0
+    );
+
+    const totalPaidAmount = paidInvoices.reduce((sum, invoice) => {
+      return sum + invoice.Payment.reduce((paymentSum, payment) => 
+        paymentSum + payment.amount, 0
+      );
+    }, 0);
+
+    const totalUnpaidAmount = unpaidInvoices.reduce((sum, invoice) => 
+      sum + invoice.total, 0
+    );
+
+    return {
+      projectId: project.id,
+      projectTitle: project.title,
+      totalServicesValue,
+      totalProductsValue,
+      totalProjectValue: totalServicesValue + totalProductsValue,
+      totalRevenue,
+      totalExpenses,
+      totalProfit,
+      paidInvoices: paidInvoices.length,
+      unpaidInvoices: unpaidInvoices.length,
+      totalPaidAmount,
+      totalUnpaidAmount,
+      profitMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
+    };
   }
 
   // ==================== STATISTICS ====================
@@ -1934,6 +2744,114 @@ export class ProjectService {
       cancelledProjects,
       totalTimeSpent: totalValue._sum.timeSpent || 0,
       averageProgress: Math.round(averageProgress._avg.progress || 0),
+    };
+  }
+
+  // ==================== COMPREHENSIVE ALERT SYSTEM ====================
+
+  async runAllAlerts() {
+    const results = await Promise.all([
+      this.scheduleDeadlineAlerts(),
+      this.scheduleBudgetAlerts(),
+      this.scheduleOverdueProjectAlerts(),
+    ]);
+
+    return {
+      message: 'All alerts processed successfully',
+      results,
+    };
+  }
+
+  async getProjectAlerts(projectId: number) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        budget: {
+          include: {
+            expenses: true,
+          },
+        },
+        expenses: true,
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    const alerts: any[] = [];
+
+    // Deadline alerts
+    if (project.deadline) {
+      const now = new Date();
+      const deadline = new Date(project.deadline);
+      const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysUntilDeadline <= 0) {
+        alerts.push({
+          type: 'DEADLINE_OVERDUE',
+          severity: 'CRITICAL',
+          message: `Project is overdue by ${Math.abs(daysUntilDeadline)} day(s)`,
+          daysUntilDeadline,
+        });
+      } else if (daysUntilDeadline <= 3) {
+        alerts.push({
+          type: 'DEADLINE_URGENT',
+          severity: 'HIGH',
+          message: `Project is due in ${daysUntilDeadline} day(s)`,
+          daysUntilDeadline,
+        });
+      } else if (daysUntilDeadline <= 7) {
+        alerts.push({
+          type: 'DEADLINE_WARNING',
+          severity: 'MEDIUM',
+          message: `Project is due in ${daysUntilDeadline} day(s)`,
+          daysUntilDeadline,
+        });
+      }
+    }
+
+    // Budget alerts
+    if (project.budget) {
+      const totalExpenses = project.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+      const usagePercentage = (totalExpenses / project.budget.amount) * 100;
+
+      if (usagePercentage >= 90) {
+        alerts.push({
+          type: 'BUDGET_CRITICAL',
+          severity: 'CRITICAL',
+          message: `Budget usage at ${usagePercentage.toFixed(1)}%`,
+          usagePercentage,
+          totalExpenses,
+          budgetLimit: project.budget.amount,
+        });
+      } else if (usagePercentage >= 75) {
+        alerts.push({
+          type: 'BUDGET_WARNING',
+          severity: 'HIGH',
+          message: `Budget usage at ${usagePercentage.toFixed(1)}%`,
+          usagePercentage,
+          totalExpenses,
+          budgetLimit: project.budget.amount,
+        });
+      }
+    }
+
+    // Progress alerts
+    if (project.progress < 25 && project.status === 'IN_PROGRESS') {
+      alerts.push({
+        type: 'PROGRESS_SLOW',
+        severity: 'MEDIUM',
+        message: 'Project progress is below 25%',
+        progress: project.progress,
+      });
+    }
+
+    return {
+      projectId: project.id,
+      projectTitle: project.title,
+      alerts,
+      totalAlerts: alerts.length,
     };
   }
 }

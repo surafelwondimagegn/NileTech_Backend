@@ -24,6 +24,54 @@ enum ProjectStatus {
   CANCELLED
 }
 
+enum EmployeeStatus {
+  ACTIVE
+  PENDING_HIRE
+  ON_LEAVE
+  SUSPENDED
+  TERMINATED
+  RETIRED
+  PROBATION
+  CONTRACT_ENDED
+}
+
+enum LeaveType {
+  ANNUAL_LEAVE
+  SICK_LEAVE
+  MATERNITY_LEAVE
+  PATERNITY_LEAVE
+  UNPAID_LEAVE
+  STUDY_LEAVE
+  BEREAVEMENT_LEAVE
+  OTHER
+}
+
+enum PayPeriod {
+  WEEKLY
+  BI_WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum PayrollType {
+  SALARY
+  BONUS
+  OVERTIME
+  DEDUCTION
+  ALLOWANCE
+  COMMISSION
+  REIMBURSEMENT
+}
+
+enum PayrollStatus {
+  PENDING
+  APPROVED
+  PAID
+  CANCELLED
+  FAILED
+}
+
 model Company {
   id          Int      @id @default(autoincrement())
   name        String
@@ -40,41 +88,85 @@ model Company {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  users       User[]
-  projects    Project[] @relation("CompanyProjects")
-  products    Product[]
-  services    Service[]
+  users    User[]
+  projects Project[] @relation("CompanyProjects")
+  products Product[]
+  services Service[]
 }
 
 model User {
-  id                        Int              @id @default(autoincrement())
-  name                      String
-  email                     String           @unique
-  password                  String
-  role                      Role             @default(USER)
-  companyId                 Int?
-  isActive                  Boolean          @default(true)
-  createdAt                 DateTime         @default(now())
-  updatedAt                 DateTime         @updatedAt
+  id        Int     @id @default(autoincrement())
+  name      String
+  username  String  @unique
+  email     String  @unique
+  password  String
+  role      Role    @default(USER)
+  companyId Int?
+  isActive  Boolean @default(true)
+
+  // Employee Status Information
+  employeeStatus    EmployeeStatus @default(ACTIVE)
+  employeeId        String?        @unique // Employee ID number
+  department        String? // Department/team
+  position          String? // Job title/position
+  managerId         Int? // Direct manager/supervisor
+  employmentType    String? // "FULL_TIME", "PART_TIME", "CONTRACT", "INTERN"
+  contractStartDate DateTime? // Contract start date
+  contractEndDate   DateTime? // Contract end date
+  probationEndDate  DateTime? // End of probation period
+
+  // Leave Management
+  leaveBalance     Float?    @default(0) // Remaining leave days
+  totalLeaveDays   Float?    @default(0) // Total leave days allocated
+  lastLeaveDate    DateTime? // Last leave taken
+  nextLeaveRequest DateTime? // Next planned leave
+
+  // Salary Information
+  baseSalary       Float?    @default(0) // Base monthly salary
+  hourlyRate       Float?    @default(0) // Hourly rate for hourly employees
+  payPeriod        PayPeriod @default(MONTHLY) // How often they get paid
+  isHourlyEmployee Boolean   @default(false) // Whether employee is paid hourly
+  joinDate         DateTime? // When employee joined
+  lastSalaryReview DateTime? // Last salary review date
+  nextSalaryReview DateTime? // Next salary review date
+
+  // Status Change Tracking
+  statusChangedAt    DateTime? // When status was last changed
+  statusChangedBy    Int? // Who changed the status
+  statusChangeReason String? // Reason for status change
+
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
   profile                   Profile?
-  projects                  Project[]        @relation("AssignedProjects")
-  clientProjects            Project[]        @relation("ClientProjects")
+  projects                  Project[]          @relation("AssignedProjects")
+  clientProjects            Project[]          @relation("ClientProjects")
   refreshTokens             RefreshToken[]
-  sentMessages              Message[]        @relation("SentMessages")
-  receivedMessages          Message[]        @relation("ReceivedMessages")
+  sentMessages              Message[]          @relation("SentMessages")
+  receivedMessages          Message[]          @relation("ReceivedMessages")
   notifications             Notification[]
   todos                     Todo[]
-  tasksAssigned             Task[]           @relation("UserTasks")
+  tasksAssigned             Task[]             @relation("UserTasks")
   Transaction               Transaction[]
   budgetHistory             BudgetHistory[]
   projectUpdates            ProjectUpdate[]
   projectHistory            ProjectHistory[]
-  projectUpdatesBy          Project[]        @relation("ProjectUpdates")
-  projectServiceAssignments ProjectService[] @relation("ProjectServiceAssignments")
+  projectUpdatesBy          Project[]          @relation("ProjectUpdates")
+  projectServiceAssignments ProjectService[]   @relation("ProjectServiceAssignments")
   projectTimeEntries        ProjectTimeEntry[]
   payrolls                  Payroll[]
-  
-  company                   Company?         @relation(fields: [companyId], references: [id])
+  salaryHistory             SalaryHistory[]
+  processedPayrolls         Payroll[]          @relation("ProcessedPayrolls")
+  approvedSalaryChanges     SalaryHistory[]    @relation("ApprovedSalaryChanges")
+
+  // Employee Management Relations
+  manager               User?               @relation("EmployeeManager", fields: [managerId], references: [id])
+  subordinates          User[]              @relation("EmployeeManager")
+  statusChanges         UserStatusHistory[] @relation("UserStatusChanges")
+  statusChangesBy       UserStatusHistory[] @relation("StatusChanges")
+  leaveRequests         LeaveRequest[]
+  approvedLeaveRequests LeaveRequest[]      @relation("ApprovedLeaveRequests")
+
+  company Company? @relation(fields: [companyId], references: [id])
 }
 
 model Profile {
@@ -144,8 +236,8 @@ model Service {
   category     Category? @relation(fields: [categoryId], references: [id])
   company      Company?  @relation(fields: [companyId], references: [id])
   description  String?
-  price        Float     // Selling price (default)
-  cost         Float?    // Cost to provide the service (for profit calculation)
+  price        Float // Selling price (default)
+  cost         Float? // Cost to provide the service (for profit calculation)
   isActive     Boolean   @default(true)
   duration     Int? // Estimated duration in hours
   serviceCode  String?   @unique // Unique service identifier
@@ -154,12 +246,12 @@ model Service {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  projects     ProjectService[]
-  invoiceItems InvoiceItem[]
+  projects      ProjectService[]
+  invoiceItems  InvoiceItem[]
   proformaItems ProformaItem[]
-  taxId        Int?
-  tax          Tax?                   @relation(fields: [taxId], references: [id])
-  soldServices SoldService[]
+  taxId         Int?
+  tax           Tax?             @relation(fields: [taxId], references: [id])
+  soldServices  SoldService[]
 }
 
 model Project {
@@ -186,17 +278,17 @@ model Project {
   lastUpdatedBy      Int?
   isPublic           Boolean       @default(true) // Whether project is visible to client
   allowClientUpdates Boolean       @default(false) // Whether client can add updates
-  
+
   // Project Tracking Fields
-  progress           Int           @default(0) // 0-100 percentage
-  timeSpent          Int           @default(0) // Total time spent in minutes
-  timeEstimated      Int? // Estimated time in minutes
-  lastActivityAt     DateTime? // Last activity timestamp
-  milestones         ProjectMilestone[]
-  timeEntries        ProjectTimeEntry[]
-  
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  progress       Int                @default(0) // 0-100 percentage
+  timeSpent      Int                @default(0) // Total time spent in minutes
+  timeEstimated  Int? // Estimated time in minutes
+  lastActivityAt DateTime? // Last activity timestamp
+  milestones     ProjectMilestone[]
+  timeEntries    ProjectTimeEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   client            User             @relation("ClientProjects", fields: [clientId], references: [id])
   company           Company?         @relation("CompanyProjects", fields: [companyId], references: [id])
@@ -212,7 +304,7 @@ model Project {
   history           ProjectHistory[]
   services          ProjectService[]
   products          ProjectProduct[]
-  messages            Message[]
+  messages          Message[]
   proformas         Proforma[]
 }
 
@@ -249,135 +341,161 @@ model Tax {
   id          Int      @id @default(autoincrement())
   name        String   @unique
   description String?
-  rate        Float    // Tax rate (percentage or fixed amount)
+  rate        Float // Tax rate (percentage or fixed amount)
   type        TaxType  @default(PERCENTAGE)
   isActive    Boolean  @default(true)
   isDefault   Boolean  @default(false) // Default tax for the system
-  country     String?  // Country code for region-specific taxes
-  state       String?  // State/province for region-specific taxes
+  country     String? // Country code for region-specific taxes
+  state       String? // State/province for region-specific taxes
+  isVAT       Boolean  @default(false) // Whether this is a VAT tax
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  products Product[]
-  services Service[]
-  soldProducts SoldProduct[]
-  invoiceItems InvoiceItem[]
+  products         Product[]
+  services         Service[]
+  soldProducts     SoldProduct[]
+  invoiceItems     InvoiceItem[]
   taxAccumulations TaxAccumulation[]
-  soldServices SoldService[]
+  soldServices     SoldService[]
+  proformaItems    ProformaItem[]
+  invoices         Invoice[]
+  proformas        Proforma[]
 }
 
 model TaxAccumulation {
-  id        Int      @id @default(autoincrement())
-  taxId     Int
-  month     Int      // Month (1-12)
-  year      Int      // Year
-  totalTax  Float    @default(0) // Total tax collected for this month/year
-  totalSales Float   @default(0) // Total sales amount for this month/year
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  taxId      Int
+  month      Int // Month (1-12)
+  year       Int // Year
+  totalTax   Float    @default(0) // Total tax collected for this month/year
+  totalSales Float    @default(0) // Total sales amount for this month/year
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   tax Tax @relation(fields: [taxId], references: [id])
 
   @@unique([taxId, month, year])
 }
 
-model Product {
-  id           Int       @id @default(autoincrement())
-  name         String
-  categoryId   Int?
-  companyId    Int?
-  category     Category? @relation(fields: [categoryId], references: [id])
-  company      Company?  @relation(fields: [companyId], references: [id])
-  description  String?
-  buyingPrice  Float
-  sellingPrice Float
-  stock        Int       @default(0)
-  image        String? // URL or path to product image
-  sku          String?   @unique // Stock Keeping Unit
-  weight       Float? // Product weight in kg
-  brand        String? // Product brand name
-  model        String? // Product model number
-  quality      ProductQuality @default(BRAND_NEW)
-  condition    String? // Product condition description
-  warranty     Int? // Warranty period in days
-  supplier     String? // Supplier or manufacturer name
-  supplierContact String? // Supplier contact information
-  minStockLevel Int? // Minimum stock level for alerts
-  maxStockLevel Int? // Maximum stock level
-  location     String? // Storage location
-  tags         String? // Comma-separated tags for categorization
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+model Supplier {
+  id            Int      @id @default(autoincrement())
+  name          String
+  email         String?
+  phone         String?
+  address       String?
+  website       String?
+  contactPerson String?
+  notes         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  projects     ProjectProduct[]
-  invoiceItems InvoiceItem[]
+  products Product[]
+}
+
+model Product {
+  id              Int            @id @default(autoincrement())
+  name            String
+  categoryId      Int?
+  companyId       Int?
+  supplierId      Int?
+  category        Category?      @relation(fields: [categoryId], references: [id])
+  company         Company?       @relation(fields: [companyId], references: [id])
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id])
+  description     String?
+  buyingPrice     Float
+  sellingPrice    Float
+  stock           Int            @default(0)
+  image           String? // URL or path to product image
+  sku             String?        @unique // Stock Keeping Unit
+  weight          Float? // Product weight in kg
+  brand           String? // Product brand name
+  model           String? // Product model number
+  quality         ProductQuality @default(BRAND_NEW)
+  condition       String? // Product condition description
+  warranty        Int? // Warranty period in days
+  supplierName    String? // Legacy field - supplier or manufacturer name
+  supplierContact String? // Legacy field - supplier contact information
+  minStockLevel   Int? // Minimum stock level for alerts
+  maxStockLevel   Int? // Maximum stock level
+  location        String? // Storage location
+  tags            String? // Comma-separated tags for categorization
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  projects      ProjectProduct[]
+  invoiceItems  InvoiceItem[]
   proformaItems ProformaItem[]
-  transactions InventoryTransaction[]
-  soldProducts SoldProduct[]
-  budgetId     Int?
-  budget       Budget?                @relation(fields: [budgetId], references: [id])
-  taxId        Int?
-  tax          Tax?                   @relation(fields: [taxId], references: [id])
+  transactions  InventoryTransaction[]
+  soldProducts  SoldProduct[]
+  budgetId      Int?
+  budget        Budget?                @relation(fields: [budgetId], references: [id])
+  taxId         Int?
+  tax           Tax?                   @relation(fields: [taxId], references: [id])
 }
 
 model Invoice {
-  id                    Int           @id @default(autoincrement())
-  invoiceNumber         String?       @unique // Temporarily optional for migration
-  clientName            String
-  clientEmail           String? // Optional email for manual invoices
-  clientPhone           String? // Optional phone for manual invoices
-  clientAddress         String? // Client address
-  projectId             Int? // Optional - for project-based invoices
-  status                String        @default("DRAFT") // "DRAFT", "SENT", "PAID", "OVERDUE", "CANCELLED", "PARTIALLY_PAID"
-  paymentTerms          String        @default("NET_30") // "IMMEDIATE", "NET_7", "NET_15", "NET_30", "NET_45", "NET_60", "CUSTOM"
-  customPaymentDays     Int? // Custom payment days when paymentTerms is CUSTOM
-  issuedAt              DateTime      @default(now())
-  dueDate               DateTime? // Calculated based on payment terms
-  subtotal              Float         @default(0) // Sum of all items before discounts
-  taxRate               Float         @default(0) // Tax rate for the entire invoice
-  taxAmount             Float         @default(0) // Calculated tax amount
-  discountAmount        Float         @default(0) // Discount amount for the entire invoice
-  discountPercentage    Float         @default(0) // Discount percentage for the entire invoice
-  shippingAmount        Float         @default(0) // Shipping amount
-  total                 Float         @default(0) // Grand total
-  currency              String        @default("USD") // Currency code
-  purchaseOrderNumber   String? // Purchase order number
-  notes                 String? // Optional notes for manual invoices
-  termsAndConditions    String? // Terms and conditions
-  includeTax            Boolean       @default(true) // Whether to include tax
-  includeShipping       Boolean       @default(false) // Whether to include shipping
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @default(now())
+  id                  Int       @id @default(autoincrement())
+  invoiceNumber       String?   @unique // Temporarily optional for migration
+  clientName          String
+  clientEmail         String? // Optional email for manual invoices
+  clientPhone         String? // Optional phone for manual invoices
+  clientAddress       String? // Client address
+  projectId           Int? // Optional - for project-based invoices
+  tinId               Int? // TIN number reference
+  taxId               Int? // Tax reference (VAT)
+  status              String    @default("DRAFT") // "DRAFT", "SENT", "PAID", "OVERDUE", "CANCELLED", "PARTIALLY_PAID"
+  paymentTerms        String    @default("NET_30") // "IMMEDIATE", "NET_7", "NET_15", "NET_30", "NET_45", "NET_60", "CUSTOM"
+  customPaymentDays   Int? // Custom payment days when paymentTerms is CUSTOM
+  issuedAt            DateTime  @default(now())
+  dueDate             DateTime? // Calculated based on payment terms
+  subtotal            Float     @default(0) // Sum of all items before discounts
+  taxRate             Float     @default(0) // Tax rate for the entire invoice
+  taxAmount           Float     @default(0) // Calculated tax amount
+  discountAmount      Float     @default(0) // Discount amount for the entire invoice
+  discountPercentage  Float     @default(0) // Discount percentage for the entire invoice
+  shippingAmount      Float     @default(0) // Shipping amount
+  total               Float     @default(0) // Grand total
+  currency            String    @default("USD") // Currency code
+  purchaseOrderNumber String? // Purchase order number
+  notes               String? // Optional notes for manual invoices
+  termsAndConditions  String? // Terms and conditions
+  includeTax          Boolean   @default(true) // Whether to include tax
+  includeShipping     Boolean   @default(false) // Whether to include shipping
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @default(now())
 
   project Project?      @relation(fields: [projectId], references: [id])
+  tin     TIN?         @relation(fields: [tinId], references: [id])
+  tax     Tax?         @relation(fields: [taxId], references: [id])
   items   InvoiceItem[]
   Payment Payment[]
   Revenue Revenue[]
 }
 
 model InvoiceItem {
-  id                Int     @id @default(autoincrement())
-  invoiceId         Int
-  productId         Int?
-  serviceId         Int?
-  quantity          Int     @default(1)
-  unitPrice         Float
-  discount          Float   @default(0) // Discount amount for this item
-  discountPercentage Float  @default(0) // Discount percentage for this item
-  taxRate           Float   @default(0) // Tax rate for this item
-  subtotal          Float   @default(0) // quantity * unitPrice
-  totalAfterDiscount Float  @default(0) // subtotal - discount
-  taxAmount         Float   @default(0) // Calculated tax amount for this item
-  total             Float   @default(0) // totalAfterDiscount + taxAmount
-  description       String? // Description of the item (e.g., "Premium service with extended warranty")
-  useDefaultPrice   Boolean @default(false) // Whether to use default price from product/service
+  id                 Int     @id @default(autoincrement())
+  invoiceId          Int
+  productId          Int?
+  serviceId          Int?
+  quantity           Int     @default(1)
+  unitPrice          Float
+  discount           Float   @default(0) // Discount amount for this item
+  discountPercentage Float   @default(0) // Discount percentage for this item
+  taxRate            Float   @default(0) // Tax rate for this item
+  subtotal           Float   @default(0) // quantity * unitPrice
+  totalAfterDiscount Float   @default(0) // subtotal - discount
+  taxAmount          Float   @default(0) // Calculated tax amount for this item
+  total              Float   @default(0) // totalAfterDiscount + taxAmount
+  description        String? // Description of the item (e.g., "Premium service with extended warranty")
+  useDefaultPrice    Boolean @default(false) // Whether to use default price from product/service
 
   invoice Invoice  @relation(fields: [invoiceId], references: [id])
   product Product? @relation(fields: [productId], references: [id])
   service Service? @relation(fields: [serviceId], references: [id])
   taxId   Int?
-  tax     Tax?      @relation(fields: [taxId], references: [id])
+  tax     Tax?     @relation(fields: [taxId], references: [id])
 }
 
 model RefreshToken {
@@ -566,26 +684,26 @@ model Receipt {
 }
 
 model Message {
-  id         Int      @id @default(autoincrement())
-  senderId   Int
-  receiverId Int?
-  projectId  Int? // For project-based chat rooms
-  content    String   @db.Text
-  messageType String  @default("TEXT") // "TEXT", "FILE", "SYSTEM"
-  fileUrl    String? // URL to uploaded file
-  fileName   String? // Original filename
-  fileSize   Int? // File size in bytes
-  isEdited   Boolean  @default(false)
-  editedAt   DateTime?
-  replyToId  Int? // For reply messages
-  read       Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          Int       @id @default(autoincrement())
+  senderId    Int
+  receiverId  Int?
+  projectId   Int? // For project-based chat rooms
+  content     String    @db.Text
+  messageType String    @default("TEXT") // "TEXT", "FILE", "SYSTEM"
+  fileUrl     String? // URL to uploaded file
+  fileName    String? // Original filename
+  fileSize    Int? // File size in bytes
+  isEdited    Boolean   @default(false)
+  editedAt    DateTime?
+  replyToId   Int? // For reply messages
+  read        Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  sender   User @relation("SentMessages", fields: [senderId], references: [id])
-  receiver User? @relation("ReceivedMessages", fields: [receiverId], references: [id])
-  project  Project? @relation(fields: [projectId], references: [id])
-  replyTo  Message? @relation("MessageReplies", fields: [replyToId], references: [id])
+  sender   User      @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User?     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  project  Project?  @relation(fields: [projectId], references: [id])
+  replyTo  Message?  @relation("MessageReplies", fields: [replyToId], references: [id])
   replies  Message[] @relation("MessageReplies")
 }
 
@@ -674,23 +792,23 @@ model ProjectTimeEntry {
 
 // Junction table for Project-Service relationship
 model ProjectService {
-  id         Int       @id @default(autoincrement())
-  projectId  Int
-  serviceId  Int
-  quantity   Int       @default(1)
-  unitPrice  Float? // Optional - if not provided, use service's default price
-  unitCost   Float? // Optional - if not provided, use service's default cost
-  discount   Float?    @default(0) // Discount percentage or amount
-  totalPrice Float? // Calculated total price (quantity * unitPrice - discount)
-  totalCost  Float? // Calculated total cost (quantity * unitCost)
+  id          Int       @id @default(autoincrement())
+  projectId   Int
+  serviceId   Int
+  quantity    Int       @default(1)
+  unitPrice   Float? // Optional - if not provided, use service's default price
+  unitCost    Float? // Optional - if not provided, use service's default cost
+  discount    Float?    @default(0) // Discount percentage or amount
+  totalPrice  Float? // Calculated total price (quantity * unitPrice - discount)
+  totalCost   Float? // Calculated total cost (quantity * unitCost)
   totalProfit Float? // Calculated profit (totalPrice - totalCost)
-  notes      String?   @db.Text
-  status     String?   @default("PENDING") // "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"
-  startDate  DateTime?
-  endDate    DateTime?
-  assignedTo Int? // User ID assigned to this service
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  notes       String?   @db.Text
+  status      String?   @default("PENDING") // "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"
+  startDate   DateTime?
+  endDate     DateTime?
+  assignedTo  Int? // User ID assigned to this service
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   service        Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
@@ -742,23 +860,23 @@ model SoldProduct {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  product Product   @relation(fields: [productId], references: [id])
-  revenue Revenue[]
-  profit  Profit[]
-  expense Expense[]
-  taxId   Int?
-  tax     Tax?      @relation(fields: [taxId], references: [id])
-  taxAmount Float   @default(0) // Tax amount collected on this sale
+  product   Product   @relation(fields: [productId], references: [id])
+  revenue   Revenue[]
+  profit    Profit[]
+  expense   Expense[]
+  taxId     Int?
+  tax       Tax?      @relation(fields: [taxId], references: [id])
+  taxAmount Float     @default(0) // Tax amount collected on this sale
 }
 
 model SoldService {
   id            Int      @id @default(autoincrement())
   serviceId     Int
   quantity      Int      @default(1)
-  sellingPrice  Float    // Price at which it was sold
-  cost          Float    // Cost to provide the service
-  totalRevenue  Float    // quantity * sellingPrice
-  totalProfit   Float    // quantity * (sellingPrice - cost)
+  sellingPrice  Float // Price at which it was sold
+  cost          Float // Cost to provide the service
+  totalRevenue  Float // quantity * sellingPrice
+  totalProfit   Float // quantity * (sellingPrice - cost)
   customerName  String?
   customerEmail String?
   customerPhone String?
@@ -767,75 +885,181 @@ model SoldService {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  service Service   @relation(fields: [serviceId], references: [id])
-  revenue Revenue[]
-  profit  Profit[]
-  expense Expense[]
-  taxId   Int?
-  tax     Tax?      @relation(fields: [taxId], references: [id])
-  taxAmount Float   @default(0) // Tax amount collected on this sale
+  service   Service   @relation(fields: [serviceId], references: [id])
+  revenue   Revenue[]
+  profit    Profit[]
+  expense   Expense[]
+  taxId     Int?
+  tax       Tax?      @relation(fields: [taxId], references: [id])
+  taxAmount Float     @default(0) // Tax amount collected on this sale
 }
 
 model Payroll {
-  id          Int      @id @default(autoincrement())
+  id          Int           @id @default(autoincrement())
   employeeId  Int
   amount      Float
-  period      String   // e.g., "2024-01", "2024-Q1"
-  type        String   // "SALARY", "BONUS", "OVERTIME", "DEDUCTION"
+  period      String // e.g., "2024-01", "2024-Q1"
+  type        PayrollType   @default(SALARY)
   description String?
-  status      String   @default("PENDING") // "PENDING", "APPROVED", "PAID", "CANCELLED"
-  paymentDate DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      PayrollStatus @default(PENDING)
 
-  employee User @relation(fields: [employeeId], references: [id])
+  // Enhanced Payroll Fields
+  baseSalary          Float  @default(0) // Base salary for this period
+  allowances          Float  @default(0) // Total allowances
+  deductions          Float  @default(0) // Total deductions
+  overtimeHours       Float? @default(0) // Overtime hours worked
+  overtimeRate        Float? @default(0) // Overtime rate per hour
+  overtimeAmount      Float  @default(0) // Total overtime pay
+  bonusAmount         Float  @default(0) // Bonus amount
+  commissionAmount    Float  @default(0) // Commission amount
+  reimbursementAmount Float  @default(0) // Reimbursement amount
+  grossPay            Float  @default(0) // Total before deductions
+  netPay              Float  @default(0) // Final amount after deductions
+
+  // Tax Information
+  taxAmount       Float @default(0) // Tax deducted
+  socialSecurity  Float @default(0) // Social security contribution
+  healthInsurance Float @default(0) // Health insurance deduction
+
+  // Payment Information
+  paymentMethod    String? // Payment method used
+  paymentReference String? // Payment reference number
+  paymentDate      DateTime @default(now())
+  processedBy      Int? // User ID who processed this payroll
+
+  // Period Information
+  startDate    DateTime? // Start of pay period
+  endDate      DateTime? // End of pay period
+  workingDays  Int? // Number of working days in period
+  workingHours Float? // Total working hours in period
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee        User  @relation(fields: [employeeId], references: [id])
+  processedByUser User? @relation("ProcessedPayrolls", fields: [processedBy], references: [id])
+}
+
+// Track salary changes over time
+model SalaryHistory {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  oldSalary     Float? // Previous salary
+  newSalary     Float // New salary
+  changeType    String // "INCREASE", "DECREASE", "INITIAL", "PROMOTION", "ANNUAL_REVIEW"
+  reason        String? // Reason for salary change
+  effectiveDate DateTime @default(now()) // When the change takes effect
+  approvedBy    Int? // User ID who approved the change
+  notes         String? // Additional notes
+  createdAt     DateTime @default(now())
+
+  user           User  @relation(fields: [userId], references: [id])
+  approvedByUser User? @relation("ApprovedSalaryChanges", fields: [approvedBy], references: [id])
+}
+
+// Track employee status changes
+model UserStatusHistory {
+  id            Int             @id @default(autoincrement())
+  userId        Int
+  oldStatus     EmployeeStatus?
+  newStatus     EmployeeStatus
+  reason        String?
+  changedBy     Int
+  effectiveDate DateTime        @default(now())
+  notes         String?
+  createdAt     DateTime        @default(now())
+
+  user          User @relation("UserStatusChanges", fields: [userId], references: [id])
+  changedByUser User @relation("StatusChanges", fields: [changedBy], references: [id])
+}
+
+// Leave request management
+model LeaveRequest {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  leaveType       LeaveType
+  startDate       DateTime
+  endDate         DateTime
+  totalDays       Float // Calculated total days
+  reason          String?
+  status          String    @default("PENDING") // "PENDING", "APPROVED", "REJECTED", "CANCELLED"
+  approvedBy      Int?
+  approvedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user           User  @relation(fields: [userId], references: [id])
+  approvedByUser User? @relation("ApprovedLeaveRequests", fields: [approvedBy], references: [id])
 }
 
 model Proforma {
-  id                    Int           @id @default(autoincrement())
-  proformaNumber        String        @unique
-  clientName            String
-  clientEmail           String?
-  clientPhone           String?
-  clientAddress         String?
-  projectId             Int?
-  status                String        @default("DRAFT") // "DRAFT", "SENT", "APPROVED", "CONVERTED", "EXPIRED"
-  subtotal              Float         @default(0)
-  taxRate               Float         @default(0)
-  taxAmount             Float         @default(0)
-  discountAmount        Float         @default(0)
-  discountPercentage    Float         @default(0)
-  shippingAmount        Float         @default(0)
-  total                 Float         @default(0)
-  currency              String        @default("USD")
-  notes                 String?
-  termsAndConditions    String?
-  validUntil            DateTime?
-  issuedAt              DateTime      @default(now())
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  id                 Int       @id @default(autoincrement())
+  proformaNumber     String    @unique
+  clientName         String
+  clientEmail        String?
+  clientPhone        String?
+  clientAddress      String?
+  projectId          Int?
+  tinId              Int? // TIN number reference (mandatory for proforma)
+  taxId              Int? // Tax reference (VAT) - mandatory for proforma
+  status             String    @default("DRAFT") // "DRAFT", "SENT", "APPROVED", "CONVERTED", "EXPIRED"
+  subtotal           Float     @default(0)
+  taxRate            Float     @default(0)
+  taxAmount          Float     @default(0)
+  discountAmount     Float     @default(0)
+  discountPercentage Float     @default(0)
+  shippingAmount     Float     @default(0)
+  total              Float     @default(0)
+  currency           String    @default("USD")
+  notes              String?
+  termsAndConditions String?
+  validUntil         DateTime?
+  issuedAt           DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  project Project?      @relation(fields: [projectId], references: [id])
+  project Project?       @relation(fields: [projectId], references: [id])
+  tin     TIN?          @relation(fields: [tinId], references: [id])
+  tax     Tax?          @relation(fields: [taxId], references: [id])
   items   ProformaItem[]
 }
 
 model ProformaItem {
-  id                Int     @id @default(autoincrement())
-  proformaId        Int
-  productId         Int?
-  serviceId         Int?
-  quantity          Int     @default(1)
-  unitPrice         Float
-  discount          Float   @default(0)
-  discountPercentage Float  @default(0)
-  taxRate           Float   @default(0)
-  subtotal          Float   @default(0)
-  totalAfterDiscount Float  @default(0)
-  taxAmount         Float   @default(0)
-  total             Float   @default(0)
-  description       String?
+  id                 Int     @id @default(autoincrement())
+  proformaId         Int
+  productId          Int? // Optional for proforma
+  serviceId          Int? // Optional for proforma
+  quantity           Int     @default(1)
+  unitPrice          Float
+  discount           Float   @default(0)
+  discountPercentage Float   @default(0)
+  taxRate            Float   @default(0)
+  subtotal           Float   @default(0)
+  totalAfterDiscount Float   @default(0)
+  taxAmount          Float   @default(0)
+  total              Float   @default(0)
+  description        String?
+  taxId              Int? // Tax reference for this item
+  useDefaultPrice    Boolean @default(false) // Whether to use default price from product/service
 
   proforma Proforma @relation(fields: [proformaId], references: [id])
   product  Product? @relation(fields: [productId], references: [id])
   service  Service? @relation(fields: [serviceId], references: [id])
+  tax      Tax?     @relation(fields: [taxId], references: [id])
+}
+
+model TIN {
+  id          Int      @id @default(autoincrement())
+  tinNumber   String   @unique // Tax Identification Number
+  companyName String
+  country     String? // Country code
+  state       String? // State/province
+  isActive    Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoices  Invoice[]
+  proformas Proforma[]
 }

@@ -36,6 +36,14 @@ export class CreateProductDto {
   categoryId?: number;
 
   @ApiPropertyOptional({
+    description: 'Supplier ID',
+    example: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  supplierId?: number;
+
+  @ApiPropertyOptional({
     description: 'Product description',
     example: 'High-performance laptop with 16GB RAM and 512GB SSD',
     maxLength: 500,

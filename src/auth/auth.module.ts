@@ -12,6 +12,7 @@ import { ProfileModule } from '../profile/profile.module';
 
 @Module({
   imports: [
+    ConfigModule,
     PassportModule,
     PrismaModule,
     ProfileModule,

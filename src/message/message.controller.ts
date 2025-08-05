@@ -18,7 +18,7 @@ import {
 import { MessageService } from './message.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('messages')
+@ApiTags('message')
 @Controller('messages')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')

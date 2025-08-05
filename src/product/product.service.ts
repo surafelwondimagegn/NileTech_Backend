@@ -45,6 +45,18 @@ export class ProductService {
         }
       }
 
+      // Validate supplier exists if provided
+      if (createProductDto.supplierId) {
+        const supplier = await this.prisma.supplier.findUnique({
+          where: { id: createProductDto.supplierId },
+        });
+        if (!supplier) {
+          throw new NotFoundException(
+            `Supplier with ID ${createProductDto.supplierId} not found`,
+          );
+        }
+      }
+
       // If budgetId is provided, check if budget exists and has sufficient funds
       if (createProductDto.budgetId) {
         const budget = await this.prisma.budget.findUnique({
@@ -91,6 +103,7 @@ export class ProductService {
       const {
         name,
         categoryId,
+        supplierId,
         description,
         buyingPrice,
         sellingPrice,
@@ -102,7 +115,7 @@ export class ProductService {
         quality,
         condition,
         warranty,
-        supplier,
+        supplierName,
         supplierContact,
         minStockLevel,
         maxStockLevel,
@@ -117,6 +130,7 @@ export class ProductService {
         data: {
           name,
           categoryId,
+          supplierId,
           description,
           buyingPrice,
           sellingPrice,
@@ -129,7 +143,7 @@ export class ProductService {
           quality: quality || 'BRAND_NEW',
           condition,
           warranty,
-          supplier,
+          supplierName,
           supplierContact,
           minStockLevel,
           maxStockLevel,
@@ -146,6 +160,14 @@ export class ProductService {
               name: true,
             },
           },
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
           budget: {
             select: {
               id: true,
@@ -157,7 +179,7 @@ export class ProductService {
       });
 
       // Generate and update SKU after product creation
-      const generatedSku = `Nile-Prod-${product.id}`;
+      const generatedSku = `NP-${product.id.toString().padStart(3, '0')}`;
       await this.prisma.product.update({
         where: { id: product.id },
         data: { sku: generatedSku },
@@ -199,6 +221,9 @@ export class ProductService {
         if (error.meta?.fieldName?.includes('categoryId')) {
           throw new BadRequestException('Invalid category ID provided');
         }
+        if (error.meta?.fieldName?.includes('supplierId')) {
+          throw new BadRequestException('Invalid supplier ID provided');
+        }
         if (error.meta?.fieldName?.includes('budgetId')) {
           throw new BadRequestException('Invalid budget ID provided');
         }
@@ -220,6 +245,14 @@ export class ProductService {
             select: {
               id: true,
               name: true,
+            },
+          },
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
             },
           },
           budget: {
@@ -249,6 +282,7 @@ export class ProductService {
 
   async findOne(id: number) {
     try {
+      console.log('ProductService.findOne called with id:', id, 'type:', typeof id);
       const product = await this.prisma.product.findUnique({
         where: { id },
         include: {
@@ -256,6 +290,14 @@ export class ProductService {
             select: {
               id: true,
               name: true,
+            },
+          },
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
             },
           },
           budget: {

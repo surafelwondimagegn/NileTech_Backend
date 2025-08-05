@@ -30,13 +30,23 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    // Check if user already exists
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: registerDto.email },
+    // Check if user already exists by email or username
+    const existingUser = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: registerDto.email },
+          { username: registerDto.username }
+        ]
+      },
     });
 
     if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+      if (existingUser.email === registerDto.email) {
+        throw new ConflictException('User with this email already exists');
+      }
+      if (existingUser.username === registerDto.username) {
+        throw new ConflictException('User with this username already exists');
+      }
     }
 
     // Hash password
@@ -48,6 +58,7 @@ export class AuthService {
       const user = await prisma.user.create({
         data: {
           name: registerDto.name,
+          username: registerDto.username,
           email: registerDto.email,
           password: hashedPassword,
           role: (registerDto.role || 'USER') as any,
@@ -88,6 +99,7 @@ export class AuthService {
       user: {
         id: result.user.id,
         name: result.user.name,
+        username: result.user.username,
         email: result.user.email,
         role: result.user.role,
         isActive: result.user.isActive,
@@ -102,13 +114,19 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    // Find user
-    const user = await this.prisma.user.findUnique({
-      where: { email: loginDto.email },
+    // Find user by email or username
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: loginDto.emailOrUsername },
+          { username: loginDto.emailOrUsername }
+        ]
+      },
       include: {
         profile: {
           select: {
             id: true,
+            avatar: true,
             isProfileComplete: true,
             lastLoginAt: true,
             loginCount: true,
@@ -140,8 +158,13 @@ export class AuthService {
       await this.profileService.updateLastLogin(user.id);
     }
 
-    // Generate tokens
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    // Generate tokens with different expiration based on remember me
+    const tokens = await this.generateTokens(
+      user.id, 
+      user.email, 
+      user.role, 
+      loginDto.rememberMe
+    );
 
     // Create refresh token record
     await this.createRefreshToken(user.id, tokens.refreshToken);
@@ -150,6 +173,7 @@ export class AuthService {
       user: {
         id: user.id,
         name: user.name,
+        username: user.username,
         email: user.email,
         role: user.role,
         isActive: user.isActive,
@@ -158,6 +182,7 @@ export class AuthService {
       profile: user.profile
         ? {
             id: user.profile.id,
+            avatar: user.profile.avatar,
             isProfileComplete: user.profile.isProfileComplete,
           }
         : null,
@@ -258,13 +283,15 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(
-      changePasswordDto.currentPassword,
-      user.password,
-    );
-    if (!isCurrentPasswordValid) {
-      throw new BadRequestException('Current password is incorrect');
+    // Verify current password only if provided
+    if (changePasswordDto.currentPassword) {
+      const isCurrentPasswordValid = await bcrypt.compare(
+        changePasswordDto.currentPassword,
+        user.password,
+      );
+      if (!isCurrentPasswordValid) {
+        throw new BadRequestException('Current password is incorrect');
+      }
     }
 
     // Hash new password
@@ -426,7 +453,7 @@ export class AuthService {
     return user;
   }
 
-  private async generateTokens(userId: number, email: string, role: string) {
+  private async generateTokens(userId: number, email: string, role: string, rememberMe: boolean = false) {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(
         {
@@ -436,7 +463,7 @@ export class AuthService {
         },
         {
           secret: this.configService.get('JWT_SECRET') || 'your-secret-key',
-          expiresIn: '7d', // Extended from 15m to 7 days
+          expiresIn: rememberMe ? '30d' : '7d', // 30 days if remember me, 7 days otherwise
         },
       ),
       this.jwtService.signAsync(
@@ -449,7 +476,7 @@ export class AuthService {
           secret:
             this.configService.get('JWT_REFRESH_SECRET') ||
             'refresh-secret-key',
-          expiresIn: '30d', // Extended from 7d to 30 days
+          expiresIn: rememberMe ? '90d' : '30d', // 90 days if remember me, 30 days otherwise
         },
       ),
     ]);

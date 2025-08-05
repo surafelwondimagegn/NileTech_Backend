@@ -1,29 +1,13 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEmail,
   IsString,
-  IsOptional,
-  IsEnum,
   MinLength,
   MaxLength,
+  IsEnum,
+  IsOptional,
+  IsBoolean,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
-export class LoginDto {
-  @ApiProperty({
-    description: 'User email address',
-    example: 'john@example.com',
-  })
-  @IsEmail()
-  email: string;
-
-  @ApiProperty({
-    description: 'User password',
-    example: 'password123',
-  })
-  @IsString()
-  @MinLength(6)
-  password: string;
-}
 
 export class RegisterDto {
   @ApiProperty({
@@ -32,18 +16,27 @@ export class RegisterDto {
   })
   @IsString()
   @MinLength(2)
-  @MaxLength(100)
+  @MaxLength(50)
   name: string;
 
   @ApiProperty({
-    description: 'User email address',
+    description: 'Username (unique)',
+    example: 'johndoe',
+  })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(30)
+  username: string;
+
+  @ApiProperty({
+    description: 'Email address',
     example: 'john@example.com',
   })
   @IsEmail()
   email: string;
 
   @ApiProperty({
-    description: 'User password (minimum 6 characters)',
+    description: 'Password (minimum 6 characters)',
     example: 'password123',
   })
   @IsString()
@@ -53,29 +46,39 @@ export class RegisterDto {
 
   @ApiProperty({
     description: 'User role',
-    enum: [
-      'OWNER',
-      'MANAGER',
-      'STOREKEEPER',
-      'DEVELOPER',
-      'USER',
-      'ADMIN',
-      'TECHNICIAN',
-    ],
     example: 'USER',
+    enum: ['OWNER', 'MANAGER', 'STOREKEEPER', 'DEVELOPER', 'USER', 'ADMIN', 'TECHNICIAN'],
+  })
+  @IsOptional()
+  @IsEnum(['OWNER', 'MANAGER', 'STOREKEEPER', 'DEVELOPER', 'USER', 'ADMIN', 'TECHNICIAN'], {
+    message: 'Role must be one of: OWNER, MANAGER, STOREKEEPER, DEVELOPER, USER, ADMIN, TECHNICIAN',
+  })
+  role?: string;
+}
+
+export class LoginDto {
+  @ApiProperty({
+    description: 'Email address or username',
+    example: 'john@example.com or johndoe',
+  })
+  @IsString()
+  emailOrUsername: string;
+
+  @ApiProperty({
+    description: 'Password',
+    example: 'password123',
+  })
+  @IsString()
+  password: string;
+
+  @ApiProperty({
+    description: 'Remember me option',
+    example: false,
     required: false,
   })
   @IsOptional()
-  @IsEnum([
-    'OWNER',
-    'MANAGER',
-    'STOREKEEPER',
-    'DEVELOPER',
-    'USER',
-    'ADMIN',
-    'TECHNICIAN',
-  ])
-  role?: string;
+  @IsBoolean()
+  rememberMe?: boolean;
 }
 
 export class RefreshTokenDto {
@@ -89,7 +92,7 @@ export class RefreshTokenDto {
 
 export class ForgotPasswordDto {
   @ApiProperty({
-    description: 'User email address',
+    description: 'Email address',
     example: 'john@example.com',
   })
   @IsEmail()
@@ -116,11 +119,13 @@ export class ResetPasswordDto {
 
 export class ChangePasswordDto {
   @ApiProperty({
-    description: 'Current password',
+    description: 'Current password (optional - if not provided, will skip validation)',
     example: 'oldpassword123',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  currentPassword: string;
+  currentPassword?: string; // Made optional
 
   @ApiProperty({
     description: 'New password (minimum 6 characters)',
@@ -134,7 +139,7 @@ export class ChangePasswordDto {
 
 export class VerifyEmailDto {
   @ApiProperty({
-    description: 'Verification token',
+    description: 'Email verification token',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
   @IsString()
@@ -143,7 +148,7 @@ export class VerifyEmailDto {
 
 export class ResendVerificationDto {
   @ApiProperty({
-    description: 'User email address',
+    description: 'Email address',
     example: 'john@example.com',
   })
   @IsEmail()

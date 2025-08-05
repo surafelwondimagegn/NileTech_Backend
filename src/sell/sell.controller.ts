@@ -14,7 +14,7 @@ import { SellResponseDto } from './dto/sell-response.dto';
 import { SellCombinedDto } from './dto/create-sell-combined.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('Sell')
+@ApiTags('sell')
 @ApiBearerAuth('JWT-auth')
 @ApiSecurity('JWT-auth')
 @UseGuards(JwtAuthGuard)

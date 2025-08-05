@@ -25,7 +25,7 @@ import { UpdateSoldProductDto } from './dto/update-sold-product.dto';
 import { SoldProductResponseDto } from './dto/sold-product-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('Sold Products')
+@ApiTags('sold-product')
 @ApiBearerAuth('JWT-auth')
 @ApiSecurity('JWT-auth')
 @UseGuards(JwtAuthGuard)
