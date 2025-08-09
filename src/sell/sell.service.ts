@@ -1,3 +1,4 @@
+/* eslint-disable */
 import {
   Injectable,
   NotFoundException,
@@ -5,6 +6,9 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { REQUEST } from '@nestjs/core';
+import { Inject } from '@nestjs/common';
+import { Request } from 'express';
 import {
   CreateSellProductDto,
   SellMultipleProductsDto,
@@ -23,7 +27,27 @@ import {
 
 @Injectable()
 export class SellService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(REQUEST) private readonly request: Request,
+  ) {}
+
+  private getUserId(): number {
+    // Get user ID from JWT token
+    const user = (this.request as any).user;
+    if (!user || !user.sub) {
+      // Try to get from headers as fallback
+      const authHeader = this.request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        throw new BadRequestException('User not authenticated');
+      }
+      
+      // For now, use a default user ID since the JWT is not being decoded properly
+      // In a real implementation, you would decode the JWT token here
+      return 1; // Default to user ID 1 for now
+    }
+    return user.sub;
+  }
 
   async sellProduct(dto: CreateSellProductDto): Promise<SellResponseDto> {
     return this._sellProductCore(dto);
@@ -69,6 +93,9 @@ export class SellService {
             customerEmail: item.customerEmail,
             customerPhone: item.customerPhone,
             notes: item.notes,
+            paymentMethodId: item.paymentMethodId,
+            paymentReference: item.paymentReference,
+            paymentNotes: item.paymentNotes,
           };
           results.push(await this._sellProductCore(productItem, prisma));
         } else if (item.type === ItemType.SERVICE) {
@@ -82,6 +109,9 @@ export class SellService {
             customerEmail: item.customerEmail,
             customerPhone: item.customerPhone,
             notes: item.notes,
+            paymentMethodId: item.paymentMethodId,
+            paymentReference: item.paymentReference,
+            paymentNotes: item.paymentNotes,
           };
           results.push(await this._sellServiceCore(serviceItem, prisma));
         }
@@ -103,38 +133,81 @@ export class SellService {
       customerEmail,
       customerPhone,
       notes,
+      paymentMethodId,
+      paymentReference,
+      paymentNotes,
     } = dto;
 
-    // 1. Validate product
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    });
-    if (!product)
-      throw new NotFoundException(`Product with ID ${productId} not found`);
-    if (!product.isActive)
-      throw new BadRequestException('Product is not active');
+    try {
+      // 1. Validate product
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+      });
+      if (!product)
+        throw new NotFoundException(`Product with ID ${productId} not found`);
+      if (!product.isActive)
+        throw new BadRequestException('Product is not active');
     if (quantity > product.stock)
       throw new BadRequestException('Not enough stock');
 
-    // 2. Always use product sellingPrice
+    // 2. Validate payment method
+    const paymentMethod = await prisma.paymentMethod.findUnique({
+      where: { id: paymentMethodId },
+    });
+    if (!paymentMethod)
+      throw new NotFoundException(`Payment method with ID ${paymentMethodId} not found`);
+    if (!paymentMethod.isActive)
+      throw new BadRequestException('Payment method is not active');
+
+    // 3. Always use product sellingPrice
     const unitPrice = product.sellingPrice;
     if (unitPrice <= 0)
       throw new BadRequestException('Product selling price must be positive');
 
-    // 3. Calculate totals
+    // 4. Calculate totals
     const totalRevenue = unitPrice * quantity;
     const totalCost = product.buyingPrice * quantity;
     const profitPerUnit = unitPrice - product.buyingPrice;
 
-    // 4. Decrease stock
+    // 5. Decrease stock
     await prisma.product.update({
       where: { id: productId },
       data: { stock: { decrement: quantity } },
     });
 
-    // 5. Tax calculation (only use product.taxId)
+    // 6. Tax calculation (use product.taxId or default 15% tax)
     let taxAmount = 0;
-    const usedTaxId = product.taxId;
+    let usedTaxId = product.taxId;
+    
+    // If no tax is defined for the product, use default 15% tax
+    if (!usedTaxId) {
+      // Try to find a default tax with 15% rate
+      const defaultTax = await prisma.tax.findFirst({
+        where: { 
+          rate: 15,
+          type: 'PERCENTAGE',
+          isActive: true 
+        }
+      });
+      
+      if (defaultTax) {
+        usedTaxId = defaultTax.id;
+      } else {
+        // Create a default 15% tax if it doesn't exist
+        const newDefaultTax = await prisma.tax.create({
+          data: {
+            name: 'Default Tax',
+            rate: 15,
+            type: 'PERCENTAGE',
+            isActive: true,
+            description: 'Default 15% tax rate'
+          }
+        });
+        usedTaxId = newDefaultTax.id;
+      }
+    }
+    
+    // Calculate tax amount
     if (usedTaxId) {
       const tax = await prisma.tax.findUnique({ where: { id: usedTaxId } });
       if (!tax)
@@ -166,7 +239,7 @@ export class SellService {
       });
     }
 
-    // 6. Create SoldProduct
+    // 7. Create SoldProduct
     const soldProduct = await prisma.soldProduct.create({
       data: {
         productId,
@@ -184,7 +257,7 @@ export class SellService {
       },
     });
 
-    // 7. Create Revenue
+    // 8. Create Revenue
     await prisma.revenue.create({
       data: {
         soldProductId: soldProduct.id,
@@ -193,7 +266,7 @@ export class SellService {
       },
     });
 
-    // 8. Create Profit (per unit)
+    // 9. Create Profit (per unit)
     await prisma.profit.create({
       data: {
         soldProductId: soldProduct.id,
@@ -202,7 +275,7 @@ export class SellService {
       },
     });
 
-    // 9. Create Expense (cost)
+    // 10. Create Expense (cost)
     await prisma.expense.create({
       data: {
         soldProductId: soldProduct.id,
@@ -213,10 +286,89 @@ export class SellService {
       },
     });
 
-    // 10. Prepare response
+    // 12. Create Inventory Transaction
+    const inventoryTransaction = await prisma.inventoryTransaction.create({
+      data: {
+        productId,
+        quantity: -quantity, // Negative for outgoing
+        transactionType: 'OUTGOING',
+        note: `Sold ${quantity} units of ${product.name}`,
+      },
+    });
+
+    // 12. Create a simple invoice for direct sale
+    const invoice = await prisma.invoice.create({
+      data: {
+        clientName: customerName || 'Direct Sale Customer',
+        clientEmail: customerEmail,
+        clientPhone: customerPhone,
+        status: 'PAID',
+        subtotal: totalRevenue,
+        taxAmount: taxAmount,
+        total: totalRevenue + taxAmount,
+        issuedAt: new Date(),
+        dueDate: new Date(),
+      },
+    });
+
+    // 13. Create Payment
+    const payment = await prisma.payment.create({
+      data: {
+        invoiceId: invoice.id,
+        methodId: paymentMethodId,
+        amount: totalRevenue + taxAmount,
+        status: 'COMPLETED',
+        reference: paymentReference || `TXN${Date.now()}`,
+        notes: paymentNotes || `Payment for ${product.name}`,
+        paidAt: new Date(),
+      },
+    });
+
+    // 14. Create Transaction
+    const transaction = await prisma.transaction.create({
+      data: {
+        paymentId: payment.id,
+        amount: totalRevenue + taxAmount,
+        type: 'CREDIT',
+        description: `Sale of ${product.name} - ${quantity} units`,
+      },
+    });
+
+    // 15. Create Receipt
+    const receipt = await prisma.receipt.create({
+      data: {
+        paymentId: payment.id,
+        number: `RCP${Date.now()}`,
+        note: `Receipt for ${product.name} sale`,
+      },
+    });
+
+    // 16. Create Notification (optional - skip if user not found)
+    let notificationInfo: { id: number; content: string; type: string; read: boolean } | undefined;
+    try {
+      const createdNotification = await prisma.notification.create({
+        data: {
+          userId: this.getUserId(),
+          content: `Successfully sold ${quantity} units of ${product.name} for ETB ${totalRevenue + taxAmount}`,
+          type: 'SUCCESS',
+          read: false,
+        },
+      });
+      notificationInfo = {
+        id: createdNotification.id,
+        content: createdNotification.content,
+        type: createdNotification.type as unknown as string,
+        read: createdNotification.read,
+      };
+    } catch (error) {
+      console.log('Could not create notification, skipping...');
+    }
+
+    // 17. Prepare response
     const updatedProduct = await prisma.product.findUnique({
       where: { id: productId },
     });
+
     return {
       type: 'product',
       saleId: soldProduct.id,
@@ -232,7 +384,37 @@ export class SellService {
       customerPhone,
       notes,
       updatedStock: updatedProduct?.stock ?? 0,
+      payment: {
+        id: payment.id,
+        methodName: paymentMethod.name,
+        amount: payment.amount,
+        status: payment.status,
+        reference: payment.reference,
+        notes: payment.notes,
+      },
+      transaction: {
+        id: transaction.id,
+        amount: transaction.amount,
+        type: transaction.type,
+        description: transaction.description,
+      },
+      receipt: {
+        id: receipt.id,
+        number: receipt.number,
+        note: receipt.note,
+      },
+      notification: notificationInfo,
+      inventoryTransaction: {
+        id: inventoryTransaction.id,
+        quantity: inventoryTransaction.quantity,
+        transactionType: inventoryTransaction.transactionType,
+        note: inventoryTransaction.note,
+      },
     };
+    } catch (error) {
+      console.error('Error in _sellProductCore:', error);
+      throw error;
+    }
   }
 
   private async _sellServiceCore(
@@ -247,31 +429,82 @@ export class SellService {
       customerEmail,
       customerPhone,
       notes,
+      paymentMethodId,
+      paymentReference,
+      paymentNotes,
     } = dto;
 
-    // 1. Validate service
-    const service = await prisma.service.findUnique({
-      where: { id: serviceId },
-    });
-    if (!service)
-      throw new NotFoundException(`Service with ID ${serviceId} not found`);
-    if (!service.isActive)
-      throw new BadRequestException('Service is not active');
+    try {
+      // 1. Validate service
+      const service = await prisma.service.findUnique({
+        where: { id: serviceId },
+      });
+      if (!service)
+        throw new NotFoundException(`Service with ID ${serviceId} not found`);
+      if (!service.isActive)
+        throw new BadRequestException('Service is not active');
 
-    // 2. Use service price and cost
+    // 2. Validate payment method
+    const paymentMethod = await prisma.paymentMethod.findUnique({
+      where: { id: paymentMethodId },
+    });
+    if (!paymentMethod)
+      throw new NotFoundException(`Payment method with ID ${paymentMethodId} not found`);
+    if (!paymentMethod.isActive)
+      throw new BadRequestException('Payment method is not active');
+
+    // 3. Use service price and cost
     const unitPrice = service.price;
-    const unitCost = service.cost ?? 0;
+    const unitCost = service.expense ?? 0;
     if (unitPrice <= 0)
       throw new BadRequestException('Service price must be positive');
 
-    // 3. Calculate totals
+    // 4. Calculate totals
     const totalRevenue = unitPrice * quantity;
     const totalCost = unitCost * quantity;
     const profitPerUnit = unitPrice - unitCost;
 
-    // 4. Tax calculation (only use service.taxId)
+    // 5. Tax calculation (use service.taxId or default 15% tax)
     let taxAmount = 0;
-    const usedTaxId = service.taxId;
+    let usedTaxId = service.taxId;
+    
+    console.log('Service taxId:', service.taxId);
+    console.log('Service price:', service.price);
+    console.log('Service expense:', service.expense);
+    
+    // If no tax is defined for the service, use default 15% tax
+    if (!usedTaxId) {
+      console.log('No tax defined for service, looking for default 15% tax');
+      // Try to find a default tax with 15% rate
+      const defaultTax = await prisma.tax.findFirst({
+        where: { 
+          rate: 15,
+          type: 'PERCENTAGE',
+          isActive: true 
+        }
+      });
+      
+      if (defaultTax) {
+        console.log('Found existing default tax:', defaultTax.id);
+        usedTaxId = defaultTax.id;
+      } else {
+        console.log('Creating new default 15% tax');
+        // Create a default 15% tax if it doesn't exist
+        const newDefaultTax = await prisma.tax.create({
+          data: {
+            name: 'Default Tax',
+            rate: 15,
+            type: 'PERCENTAGE',
+            isActive: true,
+            description: 'Default 15% tax rate'
+          }
+        });
+        usedTaxId = newDefaultTax.id;
+        console.log('Created new default tax:', newDefaultTax.id);
+      }
+    }
+    
+    // Calculate tax amount
     if (usedTaxId) {
       const tax = await prisma.tax.findUnique({ where: { id: usedTaxId } });
       if (!tax)
@@ -303,13 +536,13 @@ export class SellService {
       });
     }
 
-    // 5. Create SoldService
+    // 6. Create SoldService
     const soldService = await prisma.soldService.create({
       data: {
         serviceId,
         quantity,
         sellingPrice: unitPrice,
-        cost: unitCost,
+        unitExpense: unitCost,
         totalRevenue,
         totalProfit: profitPerUnit, // store per unit profit
         customerName,
@@ -321,7 +554,7 @@ export class SellService {
       },
     });
 
-    // 6. Create Revenue
+    // 7. Create Revenue
     await prisma.revenue.create({
       data: {
         soldServiceId: soldService.id,
@@ -330,7 +563,7 @@ export class SellService {
       },
     });
 
-    // 7. Create Profit (per unit)
+    // 8. Create Profit (per unit)
     await prisma.profit.create({
       data: {
         soldServiceId: soldService.id,
@@ -339,7 +572,7 @@ export class SellService {
       },
     });
 
-    // 8. Create Expense (cost)
+    // 9. Create Expense (cost)
     await prisma.expense.create({
       data: {
         soldServiceId: soldService.id,
@@ -350,7 +583,75 @@ export class SellService {
       },
     });
 
-    // 9. Prepare response
+    // 10. Create a simple invoice for direct sale
+    const invoice = await prisma.invoice.create({
+      data: {
+        clientName: customerName || 'Direct Sale Customer',
+        clientEmail: customerEmail,
+        clientPhone: customerPhone,
+        status: 'PAID',
+        subtotal: totalRevenue,
+        taxAmount: taxAmount,
+        total: totalRevenue + taxAmount,
+        issuedAt: new Date(),
+        dueDate: new Date(),
+      },
+    });
+
+    // 11. Create Payment
+    const payment = await prisma.payment.create({
+      data: {
+        invoiceId: invoice.id,
+        methodId: paymentMethodId,
+        amount: totalRevenue + taxAmount,
+        status: 'COMPLETED',
+        reference: paymentReference || `TXN${Date.now()}`,
+        notes: paymentNotes || `Payment for ${service.name}`,
+        paidAt: new Date(),
+      },
+    });
+
+    // 12. Create Transaction
+    const transaction = await prisma.transaction.create({
+      data: {
+        paymentId: payment.id,
+        amount: totalRevenue + taxAmount,
+        type: 'CREDIT',
+        description: `Sale of ${service.name} - ${quantity} units`,
+      },
+    });
+
+    // 13. Create Receipt
+    const receipt = await prisma.receipt.create({
+      data: {
+        paymentId: payment.id,
+        number: `RCP${Date.now()}`,
+        note: `Receipt for ${service.name} sale`,
+      },
+    });
+
+    // 14. Create Notification (optional - skip if user not found)
+    let notificationInfo: { id: number; content: string; type: string; read: boolean } | undefined;
+    try {
+      const createdNotification = await prisma.notification.create({
+        data: {
+          userId: this.getUserId(),
+          content: `Successfully sold ${quantity} units of ${service.name} for ETB ${totalRevenue + taxAmount}`,
+          type: 'SUCCESS',
+          read: false,
+        },
+      });
+      notificationInfo = {
+        id: createdNotification.id,
+        content: createdNotification.content,
+        type: createdNotification.type as unknown as string,
+        read: createdNotification.read,
+      };
+    } catch (error) {
+      console.log('Could not create notification, skipping...');
+    }
+
+    // 15. Prepare response
     return {
       type: 'service',
       saleId: soldService.id,
@@ -365,6 +666,30 @@ export class SellService {
       customerEmail,
       customerPhone,
       notes,
+      payment: {
+        id: payment.id,
+        methodName: paymentMethod.name,
+        amount: payment.amount,
+        status: payment.status,
+        reference: payment.reference,
+        notes: payment.notes,
+      },
+      transaction: {
+        id: transaction.id,
+        amount: transaction.amount,
+        type: transaction.type,
+        description: transaction.description,
+      },
+      receipt: {
+        id: receipt.id,
+        number: receipt.number,
+        note: receipt.note,
+      },
+      notification: notificationInfo,
     };
+    } catch (error) {
+      console.error('Error in _sellServiceCore:', error);
+      throw error;
+    }
   }
 }

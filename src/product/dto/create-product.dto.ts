@@ -8,7 +8,9 @@ import {
   Max,
   IsBoolean,
   IsEnum,
+  IsNumberString,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export enum ProductQuality {
   BRAND_NEW = 'BRAND_NEW',
@@ -33,6 +35,12 @@ export class CreateProductDto {
   })
   @IsOptional()
   @IsNumber()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value ? parseInt(value) : undefined;
+    }
+    return value;
+  })
   categoryId?: number;
 
   @ApiPropertyOptional({
@@ -41,6 +49,12 @@ export class CreateProductDto {
   })
   @IsOptional()
   @IsNumber()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value ? parseInt(value) : undefined;
+    }
+    return value;
+  })
   supplierId?: number;
 
   @ApiPropertyOptional({
@@ -68,6 +82,13 @@ export class CreateProductDto {
   })
   @IsNumber()
   @IsPositive()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const parsed = value ? parseFloat(value) : 0;
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return value || 0;
+  })
   buyingPrice: number;
 
   @ApiProperty({
@@ -77,6 +98,13 @@ export class CreateProductDto {
   })
   @IsNumber()
   @IsPositive()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const parsed = value ? parseFloat(value) : 0;
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return value || 0;
+  })
   sellingPrice: number;
 
   @ApiProperty({
@@ -86,11 +114,20 @@ export class CreateProductDto {
   })
   @IsNumber()
   @Min(0)
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const parsed = value ? parseInt(value) : 0;
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return value || 0;
+  })
   stock: number;
 
   @ApiPropertyOptional({
-    description: 'Image URL',
-    example: 'https://example.com/images/laptop.jpg',
+    description: 'Product image file (will be stored as /uploads/products/{productName}.{extension})',
+    type: 'string',
+    format: 'binary',
+    example: 'laptop.jpg',
   })
   @IsOptional()
   @IsString()
@@ -103,6 +140,12 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value ? parseFloat(value) : undefined;
+    }
+    return value;
+  })
   weight?: number;
 
   @ApiPropertyOptional({
@@ -150,25 +193,15 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value ? parseInt(value) : undefined;
+    }
+    return value;
+  })
   warranty?: number;
 
-  @ApiPropertyOptional({
-    description: 'Supplier or manufacturer name',
-    example: 'Dell Technologies',
-    maxLength: 100,
-  })
-  @IsOptional()
-  @IsString()
-  supplier?: string;
 
-  @ApiPropertyOptional({
-    description: 'Supplier contact information',
-    example: 'support@dell.com, +1-800-999-3355',
-    maxLength: 200,
-  })
-  @IsOptional()
-  @IsString()
-  supplierContact?: string;
 
   @ApiPropertyOptional({
     description: 'Minimum stock level for alerts',
@@ -178,6 +211,12 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value ? parseInt(value) : undefined;
+    }
+    return value;
+  })
   minStockLevel?: number;
 
   @ApiPropertyOptional({
@@ -188,6 +227,12 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value ? parseInt(value) : undefined;
+    }
+    return value;
+  })
   maxStockLevel?: number;
 
   @ApiPropertyOptional({
@@ -214,6 +259,12 @@ export class CreateProductDto {
   })
   @IsOptional()
   @IsNumber()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value ? parseInt(value) : undefined;
+    }
+    return value;
+  })
   budgetId?: number;
 
   @ApiPropertyOptional({
@@ -223,6 +274,12 @@ export class CreateProductDto {
   })
   @IsOptional()
   @IsNumber()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value ? parseInt(value) : undefined;
+    }
+    return value;
+  })
   taxId?: number;
 
   @ApiPropertyOptional({
@@ -232,5 +289,11 @@ export class CreateProductDto {
   })
   @IsOptional()
   @IsBoolean()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true' || value === '1' || value === true;
+    }
+    return value;
+  })
   isActive?: boolean;
 }

@@ -15,7 +15,7 @@ export class CreateProfileDto {
   userId: number;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   avatar?: string;
 
   @IsOptional()
@@ -103,27 +103,27 @@ export class CreateProfileDto {
 
   // Social Media & Contact
   @IsOptional()
-  @IsUrl()
+  @IsString()
   website?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   linkedin?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   twitter?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   github?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   facebook?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   instagram?: string;
 
   // Preferences & Settings
@@ -167,7 +167,7 @@ export class CreateProfileDto {
 
 export class UpdateProfileDto {
   @IsOptional()
-  @IsUrl()
+  @IsString()
   avatar?: string;
 
   @IsOptional()
@@ -255,27 +255,27 @@ export class UpdateProfileDto {
 
   // Social Media & Contact
   @IsOptional()
-  @IsUrl()
+  @IsString()
   website?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   linkedin?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   twitter?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   github?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   facebook?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   instagram?: string;
 
   // Preferences & Settings

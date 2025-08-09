@@ -22,8 +22,19 @@ export class SupplierService {
         );
       }
 
+      // Clean up empty strings for optional fields
+      const cleanData = {
+        ...createSupplierDto,
+        email: createSupplierDto.email?.trim() || undefined,
+        phone: createSupplierDto.phone?.trim() || undefined,
+        address: createSupplierDto.address?.trim() || undefined,
+        website: createSupplierDto.website?.trim() || undefined,
+        contactPerson: createSupplierDto.contactPerson?.trim() || undefined,
+        notes: createSupplierDto.notes?.trim() || undefined,
+      };
+
       const supplier = await this.prisma.supplier.create({
-        data: createSupplierDto,
+        data: cleanData,
       });
 
       return supplier;
@@ -135,9 +146,20 @@ export class SupplierService {
         }
       }
 
+      // Clean up empty strings for optional fields
+      const cleanData = {
+        ...updateSupplierDto,
+        email: updateSupplierDto.email?.trim() || undefined,
+        phone: updateSupplierDto.phone?.trim() || undefined,
+        address: updateSupplierDto.address?.trim() || undefined,
+        website: updateSupplierDto.website?.trim() || undefined,
+        contactPerson: updateSupplierDto.contactPerson?.trim() || undefined,
+        notes: updateSupplierDto.notes?.trim() || undefined,
+      };
+
       const supplier = await this.prisma.supplier.update({
         where: { id },
-        data: updateSupplierDto,
+        data: cleanData,
       });
 
       return supplier;

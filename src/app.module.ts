@@ -37,6 +37,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { ProfileModule } from './profile/profile.module';
 import { EmployeeModule } from './employee/employee.module';
 import { SupplierModule } from './supplier/supplier.module';
+import { SellModule } from './sell/sell.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { SupplierModule } from './supplier/supplier.module';
     ProfileModule,
     EmployeeModule,
     SupplierModule,
+    SellModule,
   ],
   controllers: [AppController],
   providers: [AppService],

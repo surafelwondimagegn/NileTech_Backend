@@ -22,7 +22,19 @@ import {
 } from '@nestjs/swagger';
 import { ProfileService } from './profile.service';
 import { CreateProfileDto, UpdateProfileDto } from './dto/create-profile.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
+import { diskStorage } from 'multer';
+import * as path from 'path';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
+const avatarStorage = diskStorage({
+  destination: './uploads/profile',
+  filename: (_req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + '-' + unique + path.extname(file.originalname));
+  },
+});
 
 @ApiTags('profile')
 @Controller('profiles')
@@ -30,6 +42,13 @@ export class ProfileController {
   constructor(private readonly profileService: ProfileService) {}
 
   @Post()
+  @UseInterceptors(FileInterceptor('avatar', {
+    storage: avatarStorage,
+    fileFilter: (_req, file, cb) => {
+      cb(file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/) ? null : new BadRequestException('Only image files allowed'), true);
+    },
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
   @ApiOperation({ summary: 'Create a new profile' })
   @ApiResponse({
     status: 201,
@@ -96,7 +115,11 @@ export class ProfileController {
   })
   @ApiResponse({ status: 404, description: 'User not found' })
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() createProfileDto: CreateProfileDto) {
+  create(@Body() createProfileDto: CreateProfileDto,
+         @UploadedFile() avatar?: Express.Multer.File) {
+    if (avatar) {
+      createProfileDto.avatar = `/uploads/profile/${avatar.filename}`;
+    }
     return this.profileService.create(createProfileDto);
   }
 
@@ -201,25 +224,54 @@ export class ProfileController {
   }
 
   @Patch(':id')
+  @UseInterceptors(FileInterceptor('avatar', {
+    storage: avatarStorage,
+    fileFilter: (_req, file, cb) => {
+      cb(file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/) ? null : new BadRequestException('Only image files allowed'), true);
+    },
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
   @ApiOperation({ summary: 'Update a profile by ID' })
   @ApiResponse({ status: 200, description: 'Profile updated successfully' })
   @ApiResponse({ status: 404, description: 'Profile not found' })
-  update(@Param('id') id: string, @Body() updateProfileDto: UpdateProfileDto) {
+  update(@Param('id') id: string, @Body() updateProfileDto: UpdateProfileDto,
+         @UploadedFile() avatar?: Express.Multer.File) {
+    if (avatar) {
+      updateProfileDto.avatar = `/uploads/profile/${avatar.filename}`;
+    }
     return this.profileService.update(+id, updateProfileDto);
   }
 
   @Patch('user/:userId')
+  @UseInterceptors(FileInterceptor('avatar', {
+    storage: avatarStorage,
+    fileFilter: (_req, file, cb) => {
+      cb(file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/) ? null : new BadRequestException('Only image files allowed'), true);
+    },
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
   @ApiOperation({ summary: 'Update a profile by user ID' })
   @ApiResponse({ status: 200, description: 'Profile updated successfully' })
   @ApiResponse({ status: 404, description: 'Profile not found' })
   updateByUserId(
     @Param('userId') userId: string,
     @Body() updateProfileDto: UpdateProfileDto,
+    @UploadedFile() avatar?: Express.Multer.File,
   ) {
+    if (avatar) {
+      updateProfileDto.avatar = `/uploads/profile/${avatar.filename}`;
+    }
     return this.profileService.updateByUserId(+userId, updateProfileDto);
   }
 
   @Patch('me/profile')
+  @UseInterceptors(FileInterceptor('avatar', {
+    storage: avatarStorage,
+    fileFilter: (_req, file, cb) => {
+      cb(file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/) ? null : new BadRequestException('Only image files allowed'), true);
+    },
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiSecurity('JWT-auth')
@@ -227,7 +279,11 @@ export class ProfileController {
   @ApiResponse({ status: 200, description: 'Profile updated successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Profile not found' })
-  updateMyProfile(@Request() req, @Body() updateProfileDto: UpdateProfileDto) {
+  updateMyProfile(@Request() req, @Body() updateProfileDto: UpdateProfileDto,
+    @UploadedFile() avatar?: Express.Multer.File) {
+    if (avatar) {
+      updateProfileDto.avatar = `/uploads/profile/${avatar.filename}`;
+    }
     return this.profileService.updateByUserId(req.user.id, updateProfileDto);
   }
 

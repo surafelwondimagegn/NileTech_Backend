@@ -48,6 +48,20 @@ export class CreateSellProductDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({ description: 'Payment method ID', example: 1 })
+  @IsInt()
+  paymentMethodId: number;
+
+  @ApiPropertyOptional({ description: 'Payment reference number', example: 'TXN123456' })
+  @IsOptional()
+  @IsString()
+  paymentReference?: string;
+
+  @ApiPropertyOptional({ description: 'Payment notes', example: 'Paid in cash' })
+  @IsOptional()
+  @IsString()
+  paymentNotes?: string;
 }
 
 export class SellProductItemDto {
@@ -88,6 +102,20 @@ export class SellProductItemDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({ description: 'Payment method ID', example: 1 })
+  @IsInt()
+  paymentMethodId: number;
+
+  @ApiPropertyOptional({ description: 'Payment reference number', example: 'TXN123456' })
+  @IsOptional()
+  @IsString()
+  paymentReference?: string;
+
+  @ApiPropertyOptional({ description: 'Payment notes', example: 'Paid in cash' })
+  @IsOptional()
+  @IsString()
+  paymentNotes?: string;
 }
 
 export class SellMultipleProductsDto {

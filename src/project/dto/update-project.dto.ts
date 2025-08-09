@@ -47,7 +47,6 @@ export class UpdateProjectDto {
   })
   @IsOptional()
   @IsString()
-  @IsNotEmpty()
   clientName?: string;
 
   @ApiProperty({
@@ -134,6 +133,35 @@ export class UpdateProjectDto {
   @IsNumber()
   @IsPositive()
   timeEstimated?: number;
+
+  @ApiProperty({
+    description: 'Total time spent in minutes',
+    example: 300,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  timeSpent?: number;
+
+  @ApiProperty({
+    description: 'Actual hours worked',
+    example: 5,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  actualHours?: number;
+
+  @ApiProperty({
+    description: 'Last activity timestamp',
+    example: '2025-07-24T15:00:00Z',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  lastActivityAt?: Date;
 
   @ApiProperty({
     description: 'Project progress (0-100)',

@@ -14,8 +14,45 @@ import {
   IsBoolean,
   Min,
   Max,
+  ValidateIf,
+  registerDecorator,
+  ValidationOptions,
+  ValidationArguments,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
+
+// Custom date validator that's more flexible
+function IsFlexibleDate(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      name: 'isFlexibleDate',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: any, args: ValidationArguments) {
+          if (value === null || value === undefined) {
+            return true; // Allow null/undefined
+          }
+          
+          if (value instanceof Date) {
+            return !isNaN(value.getTime());
+          }
+          
+          if (typeof value === 'string') {
+            const date = new Date(value);
+            return !isNaN(date.getTime());
+          }
+          
+          return false;
+        },
+        defaultMessage(args: ValidationArguments) {
+          return `${args.property} must be a valid date string or Date object`;
+        },
+      },
+    });
+  };
+}
 
 export enum ProjectStatus {
   PENDING = 'PENDING',
@@ -51,11 +88,17 @@ export class ProjectMilestoneDto {
 
   @ApiProperty({
     description: 'Due date for the milestone',
-    example: '2025-08-01T18:00:00Z',
+    example: '2025-08-01T18:00:00.000Z',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
   dueDate?: Date;
 
   @ApiProperty({
@@ -97,7 +140,7 @@ export class ProjectServiceDto {
 
   @ApiProperty({
     description: 'Quantity of the service',
-    example: 1,
+    example: 2,
     default: 1,
   })
   @IsNumber()
@@ -146,20 +189,32 @@ export class ProjectServiceDto {
 
   @ApiProperty({
     description: 'Start date for the service',
-    example: '2025-07-14T10:00:00Z',
+    example: '2025-07-14T10:00:00.000Z',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
   startDate?: Date;
 
   @ApiProperty({
     description: 'End date for the service',
-    example: '2025-07-20T18:00:00Z',
+    example: '2025-07-20T18:00:00.000Z',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
   endDate?: Date;
 
   @ApiProperty({
@@ -258,29 +313,47 @@ export class ProjectProductDto {
 
   @ApiProperty({
     description: 'Order date',
-    example: '2025-07-14T10:00:00Z',
+    example: '2025-07-14T10:00:00.000Z',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
   orderDate?: Date;
 
   @ApiProperty({
     description: 'Received date',
-    example: '2025-07-16T14:00:00Z',
+    example: '2025-07-16T14:00:00.000Z',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
   receivedDate?: Date;
 
   @ApiProperty({
     description: 'Installed date',
-    example: '2025-07-18T16:00:00Z',
+    example: '2025-07-18T16:00:00.000Z',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
   installedDate?: Date;
 
   @ApiProperty({
@@ -293,7 +366,6 @@ export class ProjectProductDto {
   notes?: string;
 }
 
-// Base project DTO with common fields
 export class BaseProjectDto {
   @ApiProperty({
     description: 'Project title',
@@ -318,10 +390,11 @@ export class BaseProjectDto {
   @ApiProperty({
     description: 'Client name',
     example: 'Acme Corporation',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  clientName: string;
+  clientName?: string;
 
   @ApiProperty({
     description: 'Client email address',
@@ -344,9 +417,11 @@ export class BaseProjectDto {
   @ApiProperty({
     description: 'Client user ID',
     example: 3,
+    required: false,
   })
+  @IsOptional()
   @IsNumber()
-  clientId: number;
+  clientId?: number;
 
   @ApiProperty({
     description: 'Budget ID',
@@ -407,6 +482,41 @@ export class BaseProjectDto {
   timeEstimated?: number;
 
   @ApiProperty({
+    description: 'Total time already spent in minutes',
+    example: 120,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  timeSpent?: number;
+
+  @ApiProperty({
+    description: 'Actual hours worked on the project',
+    example: 2,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  actualHours?: number;
+
+  @ApiProperty({
+    description: 'Timestamp of last activity',
+    example: '2025-07-24T12:00:00.000Z',
+    required: false,
+  })
+  @IsOptional()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
+  lastActivityAt?: Date;
+
+  @ApiProperty({
     description: 'Project progress (0-100)',
     example: 25,
     minimum: 0,
@@ -421,29 +531,47 @@ export class BaseProjectDto {
 
   @ApiProperty({
     description: 'Start date',
-    example: '2025-07-14T10:00:00Z',
+    example: '2025-07-14T10:00:00.000Z',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
   startedAt?: Date;
 
   @ApiProperty({
     description: 'Finish date',
-    example: '2025-08-01T18:00:00Z',
+    example: '2025-08-01T18:00:00.000Z',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
   finishedAt?: Date;
 
   @ApiProperty({
     description: 'Project deadline',
-    example: '2025-08-01T18:00:00Z',
+    example: '2025-08-01T18:00:00.000Z',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFlexibleDate()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return new Date(value).toISOString();
+    }
+    return value;
+  })
   deadline?: Date;
 
   @ApiProperty({
@@ -504,7 +632,6 @@ export class BaseProjectDto {
   milestones?: ProjectMilestoneDto[];
 }
 
-// DTO for creating project WITH automatic invoice creation
 export class CreateProjectWithInvoiceDto extends BaseProjectDto {
   @ApiProperty({
     description:
@@ -554,9 +681,35 @@ export class CreateProjectWithInvoiceDto extends BaseProjectDto {
   @IsOptional()
   @IsString()
   invoiceNotes?: string;
+
+  @ApiProperty({
+    description: 'Proforma notes (optional)',
+    example: 'Terms and conditions, delivery timeline',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  proformaNotes?: string;
+
+  @ApiProperty({
+    description: 'Create empty invoice even if no items are provided',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  createEmptyInvoice?: boolean;
+
+  @ApiProperty({
+    description: 'Create empty proforma even if no items are provided',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  createEmptyProforma?: boolean;
 }
 
-// DTO for creating project WITHOUT invoice (empty invoice will be created)
 export class CreateProjectWithoutInvoiceDto extends BaseProjectDto {
   @ApiProperty({
     description:
@@ -597,7 +750,15 @@ export class CreateProjectWithoutInvoiceDto extends BaseProjectDto {
   @ValidateNested({ each: true })
   @Type(() => ProjectProductDto)
   products?: ProjectProductDto[];
+
+  @ApiProperty({
+    description: 'Proforma notes (optional)',
+    example: 'Terms and conditions, delivery timeline',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  proformaNotes?: string;
 }
 
-// Legacy DTO for backward compatibility
 export class CreateProjectDto extends CreateProjectWithInvoiceDto {}

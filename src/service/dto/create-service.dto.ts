@@ -104,4 +104,24 @@ export class CreateServiceDto {
   @IsOptional()
   @Min(0)
   warrantyDays?: number;
+
+  @ApiProperty({
+    description: 'Service expense (cost to provide the service)',
+    example: 800.0,
+    minimum: 0,
+    required: false,
+  })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  expense?: number;
+
+  @ApiProperty({
+    description: 'Tax ID for the service',
+    example: 1,
+    required: false,
+  })
+  @IsNumber()
+  @IsOptional()
+  taxId?: number;
 }

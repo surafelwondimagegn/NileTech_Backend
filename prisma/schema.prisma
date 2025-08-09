@@ -72,6 +72,11 @@ enum PayrollStatus {
   FAILED
 }
 
+enum SupplierType {
+  COMPANY
+  PERSON
+}
+
 model Company {
   id          Int      @id @default(autoincrement())
   name        String
@@ -237,7 +242,7 @@ model Service {
   company      Company?  @relation(fields: [companyId], references: [id])
   description  String?
   price        Float // Selling price (default)
-  cost         Float? // Cost to provide the service (for profit calculation)
+  expense      Float? // Expense to provide the service (for profit calculation)
   isActive     Boolean   @default(true)
   duration     Int? // Estimated duration in hours
   serviceCode  String?   @unique // Unique service identifier
@@ -258,10 +263,10 @@ model Project {
   id                 Int           @id @default(autoincrement())
   title              String
   description        String?       @db.Text
-  clientName         String
+  clientName         String?
   clientEmail        String?
   clientPhone        String?
-  clientId           Int
+  clientId           Int?
   companyId          Int?
   budgetId           Int?
   assignedToId       Int?
@@ -290,7 +295,7 @@ model Project {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  client            User             @relation("ClientProjects", fields: [clientId], references: [id])
+  client            User?            @relation("ClientProjects", fields: [clientId], references: [id])
   company           Company?         @relation("CompanyProjects", fields: [companyId], references: [id])
   budget            Budget?          @relation(fields: [budgetId], references: [id])
   assignedTo        User?            @relation("AssignedProjects", fields: [assignedToId], references: [id])
@@ -378,17 +383,19 @@ model TaxAccumulation {
 }
 
 model Supplier {
-  id            Int      @id @default(autoincrement())
+  id            Int          @id @default(autoincrement())
   name          String
   email         String?
   phone         String?
   address       String?
+  location      String?  // Supplier location/city
   website       String?
   contactPerson String?
   notes         String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  supplierType  SupplierType @default(COMPANY)
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   products Product[]
 }
@@ -406,7 +413,7 @@ model Product {
   buyingPrice     Float
   sellingPrice    Float
   stock           Int            @default(0)
-  image           String? // URL or path to product image
+  image           String? // Dynamic image URL: /uploads/products/{productName}.{extension}
   sku             String?        @unique // Stock Keeping Unit
   weight          Float? // Product weight in kg
   brand           String? // Product brand name
@@ -414,8 +421,6 @@ model Product {
   quality         ProductQuality @default(BRAND_NEW)
   condition       String? // Product condition description
   warranty        Int? // Warranty period in days
-  supplierName    String? // Legacy field - supplier or manufacturer name
-  supplierContact String? // Legacy field - supplier contact information
   minStockLevel   Int? // Minimum stock level for alerts
   maxStockLevel   Int? // Maximum stock level
   location        String? // Storage location
@@ -438,7 +443,7 @@ model Product {
 model Invoice {
   id                  Int       @id @default(autoincrement())
   invoiceNumber       String?   @unique // Temporarily optional for migration
-  clientName          String
+  clientName          String?
   clientEmail         String? // Optional email for manual invoices
   clientPhone         String? // Optional phone for manual invoices
   clientAddress       String? // Client address
@@ -874,9 +879,9 @@ model SoldService {
   serviceId     Int
   quantity      Int      @default(1)
   sellingPrice  Float // Price at which it was sold
-  cost          Float // Cost to provide the service
+  unitExpense   Float // Expense to provide the service
   totalRevenue  Float // quantity * sellingPrice
-  totalProfit   Float // quantity * (sellingPrice - cost)
+  totalProfit   Float // quantity * (sellingPrice - unitExpense)
   customerName  String?
   customerEmail String?
   customerPhone String?

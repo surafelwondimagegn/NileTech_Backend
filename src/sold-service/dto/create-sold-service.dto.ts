@@ -16,7 +16,7 @@ export class CreateSoldServiceDto {
 
   @IsOptional()
   @IsNumber()
-  cost?: number;
+  expense?: number;
 
   @IsOptional()
   @IsString()

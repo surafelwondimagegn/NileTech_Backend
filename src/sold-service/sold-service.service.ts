@@ -8,7 +8,7 @@ export class SoldServiceService {
   constructor(private prisma: PrismaService) {}
 
   async create(createSoldServiceDto: CreateSoldServiceDto) {
-    const { serviceId, quantity, sellingPrice, cost, customerName, customerEmail, customerPhone, notes, taxId } = createSoldServiceDto;
+    const { serviceId, quantity, sellingPrice, expense, customerName, customerEmail, customerPhone, notes, taxId } = createSoldServiceDto;
 
     // Validate service exists
     const service = await this.prisma.service.findUnique({
@@ -20,11 +20,11 @@ export class SoldServiceService {
 
     // Use default values if not provided
     const finalSellingPrice = sellingPrice || service.price;
-    const finalCost = cost || service.cost || 0;
+    const finalExpense = expense || service.expense || 0;
 
     // Calculate totals
     const totalRevenue = quantity * finalSellingPrice;
-    const totalProfit = quantity * (finalSellingPrice - finalCost);
+    const totalProfit = quantity * (finalSellingPrice - finalExpense);
 
     // Calculate tax if taxId is provided
     let taxAmount = 0;
@@ -46,7 +46,7 @@ export class SoldServiceService {
         serviceId,
         quantity,
         sellingPrice: finalSellingPrice,
-        cost: finalCost,
+        unitExpense: finalExpense,
         totalRevenue,
         totalProfit,
         customerName,
@@ -63,7 +63,7 @@ export class SoldServiceService {
             name: true,
             description: true,
             price: true,
-            cost: true,
+            expense: true,
           },
         },
         tax: {
@@ -139,7 +139,7 @@ export class SoldServiceService {
             name: true,
             description: true,
             price: true,
-            cost: true,
+            expense: true,
           },
         },
         tax: {
@@ -169,20 +169,20 @@ export class SoldServiceService {
       throw new NotFoundException(`Sold service with ID ${id} not found`);
     }
 
-    const { quantity, sellingPrice, cost, customerName, customerEmail, customerPhone, notes, taxId } = updateSoldServiceDto;
+    const { quantity, sellingPrice, expense, customerName, customerEmail, customerPhone, notes, taxId } = updateSoldServiceDto;
 
     // Recalculate totals if price or quantity changes
     let totalRevenue = soldService.totalRevenue;
     let totalProfit = soldService.totalProfit;
     let taxAmount = soldService.taxAmount;
 
-    if (quantity !== undefined || sellingPrice !== undefined || cost !== undefined) {
+    if (quantity !== undefined || sellingPrice !== undefined || expense !== undefined) {
       const finalQuantity = quantity || soldService.quantity;
       const finalSellingPrice = sellingPrice || soldService.sellingPrice;
-      const finalCost = cost !== undefined ? cost : soldService.cost;
+      const finalExpense = expense !== undefined ? expense : soldService.unitExpense;
 
       totalRevenue = finalQuantity * finalSellingPrice;
-      totalProfit = finalQuantity * (finalSellingPrice - finalCost);
+      totalProfit = finalQuantity * (finalSellingPrice - finalExpense);
 
       // Recalculate tax if taxId is provided
       if (taxId) {
@@ -204,7 +204,7 @@ export class SoldServiceService {
       data: {
         quantity,
         sellingPrice,
-        cost,
+        unitExpense: expense,
         totalRevenue,
         totalProfit,
         customerName,

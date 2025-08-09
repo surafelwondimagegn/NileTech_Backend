@@ -65,6 +65,8 @@ export class ServiceController {
           duration: 40,
           requirements: 'Client must provide design mockups and content',
           warrantyDays: 30,
+          expense: 800.0,
+          taxId: 1,
         },
       },
       consulting: {
@@ -78,6 +80,8 @@ export class ServiceController {
           duration: 2,
           requirements: 'Client must provide current system overview',
           warrantyDays: 0,
+          expense: 150.0,
+          taxId: 2,
         },
       },
     },

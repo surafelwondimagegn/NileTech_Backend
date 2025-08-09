@@ -6,7 +6,14 @@ import {
   IsBoolean,
   MinLength,
   MaxLength,
+  ValidateIf,
+  IsEnum,
 } from 'class-validator';
+
+export enum SupplierType {
+  COMPANY = 'COMPANY',
+  PERSON = 'PERSON',
+}
 
 export class CreateSupplierDto {
   @ApiProperty({
@@ -25,6 +32,7 @@ export class CreateSupplierDto {
     example: 'contact@dell.com',
   })
   @IsOptional()
+  @ValidateIf((o) => o.email !== undefined && o.email !== '')
   @IsEmail()
   email?: string;
 
@@ -43,6 +51,14 @@ export class CreateSupplierDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @ApiPropertyOptional({
+    description: 'Supplier location/city',
+    example: 'Round Rock, TX',
+  })
+  @IsOptional()
+  @IsString()
+  location?: string;
 
   @ApiPropertyOptional({
     description: 'Supplier website',
@@ -76,4 +92,14 @@ export class CreateSupplierDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Type of supplier',
+    example: 'COMPANY',
+    enum: SupplierType,
+    default: 'COMPANY',
+  })
+  @IsOptional()
+  @IsEnum(SupplierType)
+  supplierType?: SupplierType;
 } 

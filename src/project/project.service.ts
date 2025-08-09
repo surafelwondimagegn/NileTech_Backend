@@ -195,13 +195,7 @@ export class ProjectService {
     await this.notificationService.createForAdmins(content, 'SUCCESS' as any);
   }
 
-  // Test method for notification system
-  async testNotificationMethods(project: any, userId: number) {
-    await this.notifyProjectCreated(project, userId);
-    await this.notifyProjectStatusChange(project, 'PENDING', 'IN_PROGRESS', userId);
-    await this.notifyDeadlineAlert(project);
-    await this.notifyProgressUpdate(project, 0, 25, userId);
-  }
+
 
   private async notifyServiceAdded(project: any, service: any, addedBy: number) {
     const content = `Service "${service.service.name}" added to project "${project.title}"`;
@@ -447,15 +441,17 @@ export class ProjectService {
     createProjectDto: CreateProjectWithInvoiceDto,
     createdBy: number,
   ) {
-    // Verify client exists
-    const client = await this.prisma.user.findUnique({
-      where: { id: createProjectDto.clientId },
-    });
+    // Verify client exists if provided
+    if (createProjectDto.clientId) {
+      const client = await this.prisma.user.findUnique({
+        where: { id: createProjectDto.clientId },
+      });
 
-    if (!client) {
-      throw new NotFoundException(
-        `Client with ID ${createProjectDto.clientId} not found`,
-      );
+      if (!client) {
+        throw new NotFoundException(
+          `Client with ID ${createProjectDto.clientId} not found`,
+        );
+      }
     }
 
     // Verify assigned user exists if provided
@@ -487,22 +483,26 @@ export class ProjectService {
           clientName: createProjectDto.clientName,
           clientEmail: createProjectDto.clientEmail,
           clientPhone: createProjectDto.clientPhone,
-          clientId: createProjectDto.clientId,
-          budgetId: createProjectDto.budgetId,
-          assignedToId: createProjectDto.assignedToId,
+          clientId: createProjectDto.clientId || null,
+          budgetId: createProjectDto.budgetId || null,
+          assignedToId: createProjectDto.assignedToId || null,
           status: createProjectDto.status || 'PENDING',
           priority: createProjectDto.priority || 'MEDIUM',
-          estimatedHours: createProjectDto.estimatedHours,
-          timeEstimated: timeEstimated,
+          estimatedHours: createProjectDto.estimatedHours || null,
+          timeEstimated: timeEstimated || null,
           progress: createProjectDto.progress || 0,
-          startedAt: createProjectDto.startedAt,
-          finishedAt: createProjectDto.finishedAt,
-          deadline: createProjectDto.deadline,
+          timeSpent: createProjectDto.timeSpent ?? 0,
+          actualHours: createProjectDto.actualHours ?? (createProjectDto.timeSpent ? Math.round(createProjectDto.timeSpent / 60) : null),
+          lastActivityAt: createProjectDto.lastActivityAt ? new Date(createProjectDto.lastActivityAt) : new Date(),
+          startedAt: createProjectDto.startedAt ? new Date(createProjectDto.startedAt) : null,
+          finishedAt: createProjectDto.finishedAt ? new Date(createProjectDto.finishedAt) : null,
+          deadline: createProjectDto.deadline ? new Date(createProjectDto.deadline) : null,
           notes: createProjectDto.notes,
           clientFeedback: createProjectDto.clientFeedback,
           internalNotes: createProjectDto.internalNotes,
           isPublic: createProjectDto.isPublic ?? true,
           allowClientUpdates: createProjectDto.allowClientUpdates ?? false,
+          lastUpdatedBy: createdBy,
         },
         include: {
           client: true,
@@ -526,28 +526,850 @@ export class ProjectService {
         },
       });
 
+      // Create invoice if requested
+      let invoice = null;
+      if (createProjectDto.createEmptyInvoice || 
+          (createProjectDto.services && createProjectDto.services.length > 0) || 
+          (createProjectDto.products && createProjectDto.products.length > 0)) {
+        
+        // Calculate invoice totals
+        let subtotal = 0;
+        const invoiceItems: any[] = [];
+
+        // Add services to invoice
+        if (createProjectDto.services) {
+          for (const serviceDto of createProjectDto.services) {
+            const serviceDetails = await prisma.service.findUnique({
+              where: { id: serviceDto.serviceId },
+            });
+
+            if (!serviceDetails) {
+              throw new NotFoundException(
+                `Service with ID ${serviceDto.serviceId} not found`,
+              );
+            }
+
+            const unitPrice = serviceDto.unitPrice || serviceDetails.price || 0;
+            const discount = serviceDto.discount || 0;
+            const totalPrice = unitPrice * serviceDto.quantity - discount;
+            subtotal += totalPrice;
+
+            const serviceDescription = `${serviceDetails.name}${serviceDetails.serviceCode ? ` (${serviceDetails.serviceCode})` : ''}${serviceDto.notes ? ` - ${serviceDto.notes}` : ''}`;
+
+            invoiceItems.push({
+              serviceId: serviceDto.serviceId,
+              quantity: serviceDto.quantity,
+              unitPrice: unitPrice,
+              description: serviceDescription,
+            });
+          }
+        }
+
+        // Add products to invoice
+        if (createProjectDto.products) {
+          for (const productDto of createProjectDto.products) {
+            const productDetails = await prisma.product.findUnique({
+              where: { id: productDto.productId },
+            });
+
+            if (!productDetails) {
+              throw new NotFoundException(
+                `Product with ID ${productDto.productId} not found`,
+              );
+            }
+
+            const unitPrice = productDto.unitPrice || productDetails.sellingPrice || 0;
+            const discount = productDto.discount || 0;
+            const totalPrice = unitPrice * productDto.quantity - discount;
+            subtotal += totalPrice;
+
+            const productDescription = `${productDetails.name}${productDetails.sku ? ` (SKU: ${productDetails.sku})` : ''}${productDto.notes ? ` - ${productDto.notes}` : ''}`;
+
+            invoiceItems.push({
+              productId: productDto.productId,
+              quantity: productDto.quantity,
+              unitPrice: unitPrice,
+              description: productDescription,
+            });
+          }
+        }
+
+        // Generate invoice number
+        const invoiceCount = await prisma.invoice.count();
+        const invoiceNumber = `INV-${String(invoiceCount + 1).padStart(6, '0')}`;
+
+        // Create invoice
+        invoice = await prisma.invoice.create({
+          data: {
+            invoiceNumber: invoiceNumber,
+            clientName: newProject.clientName || 'Client',
+            clientEmail: newProject.clientEmail || null,
+            clientPhone: newProject.clientPhone || null,
+            projectId: newProject.id,
+            subtotal: subtotal,
+            total: subtotal,
+            notes: createProjectDto.invoiceNotes,
+            issuedAt: new Date(),
+            status: 'DRAFT',
+            paymentTerms: 'NET_30',
+            currency: 'USD',
+            includeTax: false,
+            includeShipping: false,
+          },
+        });
+
+        // Create invoice items
+        await Promise.all(
+          invoiceItems.map((item) =>
+            prisma.invoiceItem.create({
+              data: {
+                invoiceId: invoice.id,
+                serviceId: item.serviceId || null,
+                productId: item.productId || null,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                description: item.description,
+                subtotal: item.quantity * item.unitPrice,
+                totalAfterDiscount: item.quantity * item.unitPrice,
+                total: item.quantity * item.unitPrice,
+              },
+            }),
+          ),
+        );
+      }
+
       // Send notifications
       await this.notifyProjectCreated(newProject, createdBy);
+      if (invoice) {
+        await this.notifyInvoiceCreated(newProject, invoice, createdBy);
+      }
 
-      return newProject;
+      return {
+        project: newProject,
+        invoice,
+      };
     });
 
     return result;
+  }
+
+  async createWithBoth(
+    createProjectDto: CreateProjectWithInvoiceDto,
+    createdBy: number,
+  ) {
+    try {
+      // Verify client exists if provided
+      if (createProjectDto.clientId) {
+        const client = await this.prisma.user.findUnique({
+          where: { id: createProjectDto.clientId },
+        });
+
+        if (!client) {
+          throw new NotFoundException(
+            `Client with ID ${createProjectDto.clientId} not found`,
+          );
+        }
+      }
+
+      // Verify assigned user exists if provided
+      if (createProjectDto.assignedToId) {
+        const assignedUser = await this.prisma.user.findUnique({
+          where: { id: createProjectDto.assignedToId },
+        });
+
+        if (!assignedUser) {
+          throw new NotFoundException(
+            `User with ID ${createProjectDto.assignedToId} not found`,
+          );
+        }
+      }
+
+      // Verify services exist if provided
+      if (createProjectDto.services) {
+        for (const serviceDto of createProjectDto.services) {
+          const service = await this.prisma.service.findUnique({
+            where: { id: serviceDto.serviceId },
+          });
+          if (!service) {
+            throw new NotFoundException(
+              `Service with ID ${serviceDto.serviceId} not found`,
+            );
+          }
+        }
+      }
+
+      // Verify products exist if provided
+      if (createProjectDto.products) {
+        for (const productDto of createProjectDto.products) {
+          const product = await this.prisma.product.findUnique({
+            where: { id: productDto.productId },
+          });
+          if (!product) {
+            throw new NotFoundException(
+              `Product with ID ${productDto.productId} not found`,
+            );
+          }
+        }
+      }
+
+      // Calculate estimated time in minutes if hours provided
+      let timeEstimated = createProjectDto.timeEstimated;
+      if (createProjectDto.estimatedHours && !timeEstimated) {
+        timeEstimated = createProjectDto.estimatedHours * 60;
+      }
+
+      // Create project with both invoice and proforma in transaction
+      const result = await this.prisma.$transaction(async (prisma) => {
+        // Create the project
+        const newProject = await prisma.project.create({
+          data: {
+            title: createProjectDto.title,
+            description: createProjectDto.description,
+            clientName: createProjectDto.clientName,
+            clientEmail: createProjectDto.clientEmail,
+            clientPhone: createProjectDto.clientPhone,
+            clientId: createProjectDto.clientId || null,
+            budgetId: createProjectDto.budgetId || null,
+            assignedToId: createProjectDto.assignedToId || null,
+            status: createProjectDto.status || 'PENDING',
+            priority: createProjectDto.priority || 'MEDIUM',
+            estimatedHours: createProjectDto.estimatedHours || null,
+            timeEstimated: timeEstimated || null,
+            progress: createProjectDto.progress || 0,
+            timeSpent: createProjectDto.timeSpent ?? 0,
+            actualHours: createProjectDto.actualHours ?? (createProjectDto.timeSpent ? Math.round(createProjectDto.timeSpent / 60) : null),
+            lastActivityAt: createProjectDto.lastActivityAt ? new Date(createProjectDto.lastActivityAt) : new Date(),
+            startedAt: createProjectDto.startedAt ? new Date(createProjectDto.startedAt) : null,
+            finishedAt: createProjectDto.finishedAt ? new Date(createProjectDto.finishedAt) : null,
+            deadline: createProjectDto.deadline ? new Date(createProjectDto.deadline) : null,
+            notes: createProjectDto.notes,
+            clientFeedback: createProjectDto.clientFeedback,
+            internalNotes: createProjectDto.internalNotes,
+            isPublic: createProjectDto.isPublic ?? true,
+            allowClientUpdates: createProjectDto.allowClientUpdates ?? false,
+            lastUpdatedBy: createdBy,
+          },
+          include: {
+            client: true,
+            assignedTo: true,
+            budget: true,
+          },
+        });
+
+        // Create project history entry
+        await prisma.projectHistory.create({
+          data: {
+            projectId: newProject.id,
+            action: 'PROJECT_CREATED',
+            details: JSON.stringify({
+              title: newProject.title,
+              clientName: newProject.clientName,
+              status: newProject.status,
+              priority: newProject.priority,
+            }),
+            createdBy: createdBy,
+          },
+        });
+
+        // Add services to project if provided
+        if (createProjectDto.services && createProjectDto.services.length > 0) {
+          for (const serviceDto of createProjectDto.services) {
+            await prisma.projectService.create({
+              data: {
+                projectId: newProject.id,
+                serviceId: serviceDto.serviceId,
+                quantity: serviceDto.quantity || 1,
+                unitPrice: serviceDto.unitPrice || null,
+                unitCost: serviceDto.unitCost || null,
+                discount: serviceDto.discount || 0,
+                status: serviceDto.status || 'PENDING',
+                startDate: serviceDto.startDate ? new Date(serviceDto.startDate) : null,
+                endDate: serviceDto.endDate ? new Date(serviceDto.endDate) : null,
+                assignedTo: serviceDto.assignedTo || null,
+                notes: serviceDto.notes,
+              },
+            });
+          }
+        }
+
+        // Add products to project if provided
+        if (createProjectDto.products && createProjectDto.products.length > 0) {
+          for (const productDto of createProjectDto.products) {
+            await prisma.projectProduct.create({
+              data: {
+                projectId: newProject.id,
+                productId: productDto.productId,
+                quantity: productDto.quantity || 1,
+                unitPrice: productDto.unitPrice || null,
+                unitCost: productDto.unitCost || null,
+                discount: productDto.discount || 0,
+                status: productDto.status || 'PENDING',
+                orderDate: productDto.orderDate ? new Date(productDto.orderDate) : null,
+                receivedDate: productDto.receivedDate ? new Date(productDto.receivedDate) : null,
+                installedDate: productDto.installedDate ? new Date(productDto.installedDate) : null,
+                notes: productDto.notes,
+              },
+            });
+          }
+        }
+
+        // Create milestones if provided
+        if (createProjectDto.milestones && createProjectDto.milestones.length > 0) {
+          for (const milestoneDto of createProjectDto.milestones) {
+            await prisma.projectMilestone.create({
+              data: {
+                projectId: newProject.id,
+                title: milestoneDto.title,
+                description: milestoneDto.description,
+                dueDate: milestoneDto.dueDate ? new Date(milestoneDto.dueDate) : null,
+                order: milestoneDto.order || 1,
+              },
+            });
+          }
+        }
+
+        // Create invoice
+        let invoice = null;
+        if (createProjectDto.createEmptyInvoice || (createProjectDto.services && createProjectDto.services.length > 0) || (createProjectDto.products && createProjectDto.products.length > 0)) {
+          // Calculate invoice totals
+          let subtotal = 0;
+          const invoiceItems: any[] = [];
+
+          // Add services to invoice
+          if (createProjectDto.services) {
+            for (const serviceDto of createProjectDto.services) {
+              const serviceDetails = await prisma.service.findUnique({
+                where: { id: serviceDto.serviceId },
+              });
+
+              if (!serviceDetails) {
+                throw new NotFoundException(
+                  `Service with ID ${serviceDto.serviceId} not found`,
+                );
+              }
+
+              const unitPrice = serviceDto.unitPrice || serviceDetails.price || 0;
+              const discount = serviceDto.discount || 0;
+              const totalPrice = unitPrice * serviceDto.quantity - discount;
+              subtotal += totalPrice;
+
+              const serviceDescription = `${serviceDetails.name}${serviceDetails.serviceCode ? ` (${serviceDetails.serviceCode})` : ''}${serviceDto.notes ? ` - ${serviceDto.notes}` : ''}`;
+
+              invoiceItems.push({
+                serviceId: serviceDto.serviceId,
+                quantity: serviceDto.quantity,
+                unitPrice: unitPrice,
+                description: serviceDescription,
+              });
+            }
+          }
+
+          // Add products to invoice
+          if (createProjectDto.products) {
+            for (const productDto of createProjectDto.products) {
+              const productDetails = await prisma.product.findUnique({
+                where: { id: productDto.productId },
+              });
+
+              if (!productDetails) {
+                throw new NotFoundException(
+                  `Product with ID ${productDto.productId} not found`,
+                );
+              }
+
+              const unitPrice = productDto.unitPrice || productDetails.sellingPrice || 0;
+              const discount = productDto.discount || 0;
+              const totalPrice = unitPrice * productDto.quantity - discount;
+              subtotal += totalPrice;
+
+              const productDescription = `${productDetails.name}${productDetails.sku ? ` (SKU: ${productDetails.sku})` : ''}${productDto.notes ? ` - ${productDto.notes}` : ''}`;
+
+              invoiceItems.push({
+                productId: productDto.productId,
+                quantity: productDto.quantity,
+                unitPrice: unitPrice,
+                description: productDescription,
+              });
+            }
+          }
+
+          // Generate invoice number
+          const invoiceCount = await prisma.invoice.count();
+          const invoiceNumber = `INV-${String(invoiceCount + 1).padStart(6, '0')}`;
+
+          // Create invoice
+          invoice = await prisma.invoice.create({
+            data: {
+              invoiceNumber: invoiceNumber,
+              clientName: newProject.clientName || 'Client',
+              clientEmail: newProject.clientEmail || null,
+              clientPhone: newProject.clientPhone || null,
+              projectId: newProject.id,
+              subtotal: subtotal,
+              total: subtotal,
+              notes: createProjectDto.invoiceNotes,
+              issuedAt: new Date(),
+              status: 'DRAFT',
+              paymentTerms: 'NET_30',
+              currency: 'USD',
+              includeTax: false,
+              includeShipping: false,
+            },
+          });
+
+          // Create invoice items
+          await Promise.all(
+            invoiceItems.map((item) =>
+              prisma.invoiceItem.create({
+                data: {
+                  invoiceId: invoice.id,
+                  serviceId: item.serviceId || null,
+                  productId: item.productId || null,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  description: item.description,
+                  subtotal: item.quantity * item.unitPrice,
+                  totalAfterDiscount: item.quantity * item.unitPrice,
+                  total: item.quantity * item.unitPrice,
+                },
+              }),
+            ),
+          );
+        }
+
+        // Create proforma
+        let proforma = null;
+        if (createProjectDto.createEmptyProforma || (createProjectDto.services && createProjectDto.services.length > 0) || (createProjectDto.products && createProjectDto.products.length > 0)) {
+          // Calculate proforma totals
+          let subtotal = 0;
+          const proformaItems: any[] = [];
+
+          // Add services to proforma
+          if (createProjectDto.services) {
+            for (const serviceDto of createProjectDto.services) {
+              const serviceDetails = await prisma.service.findUnique({
+                where: { id: serviceDto.serviceId },
+              });
+
+              if (!serviceDetails) {
+                throw new NotFoundException(
+                  `Service with ID ${serviceDto.serviceId} not found`,
+                );
+              }
+
+              const unitPrice = serviceDto.unitPrice || serviceDetails.price || 0;
+              const discount = serviceDto.discount || 0;
+              const totalPrice = unitPrice * serviceDto.quantity - discount;
+              subtotal += totalPrice;
+
+              const serviceDescription = `${serviceDetails.name}${serviceDetails.serviceCode ? ` (${serviceDetails.serviceCode})` : ''}${serviceDto.notes ? ` - ${serviceDto.notes}` : ''}`;
+
+              proformaItems.push({
+                serviceId: serviceDto.serviceId,
+                quantity: serviceDto.quantity,
+                unitPrice: unitPrice,
+                description: serviceDescription,
+              });
+            }
+          }
+
+          // Add products to proforma
+          if (createProjectDto.products) {
+            for (const productDto of createProjectDto.products) {
+              const productDetails = await prisma.product.findUnique({
+                where: { id: productDto.productId },
+              });
+
+              if (!productDetails) {
+                throw new NotFoundException(
+                  `Product with ID ${productDto.productId} not found`,
+                );
+              }
+
+              const unitPrice = productDto.unitPrice || productDetails.sellingPrice || 0;
+              const discount = productDto.discount || 0;
+              const totalPrice = unitPrice * productDto.quantity - discount;
+              subtotal += totalPrice;
+
+              const productDescription = `${productDetails.name}${productDetails.sku ? ` (SKU: ${productDetails.sku})` : ''}${productDto.notes ? ` - ${productDto.notes}` : ''}`;
+
+              proformaItems.push({
+                productId: productDto.productId,
+                quantity: productDto.quantity,
+                unitPrice: unitPrice,
+                description: productDescription,
+              });
+            }
+          }
+
+          // Generate proforma number
+          const proformaCount = await prisma.proforma.count();
+          const proformaNumber = `PROF-${String(proformaCount + 1).padStart(6, '0')}`;
+
+          // Create proforma
+          proforma = await prisma.proforma.create({
+            data: {
+              proformaNumber: proformaNumber,
+              clientName: newProject.clientName || 'Client',
+              clientEmail: newProject.clientEmail || null,
+              clientPhone: newProject.clientPhone || null,
+              projectId: newProject.id,
+              subtotal: subtotal,
+              total: subtotal,
+              notes: createProjectDto.proformaNotes,
+              issuedAt: new Date(),
+              status: 'DRAFT',
+              currency: 'USD',
+              validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+            },
+          });
+
+          // Create proforma items
+          await Promise.all(
+            proformaItems.map((item) =>
+              prisma.proformaItem.create({
+                data: {
+                  proformaId: proforma.id,
+                  serviceId: item.serviceId || null,
+                  productId: item.productId || null,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  description: item.description,
+                  subtotal: item.quantity * item.unitPrice,
+                  totalAfterDiscount: item.quantity * item.unitPrice,
+                  total: item.quantity * item.unitPrice,
+                },
+              }),
+            ),
+          );
+        }
+
+        return {
+          project: newProject,
+          invoice,
+          proforma,
+        };
+      });
+
+      // Send notifications outside transaction
+      await this.notifyProjectCreated(result.project, createdBy);
+      if (result.invoice) {
+        await this.notifyInvoiceCreated(result.project, result.invoice, createdBy);
+      }
+      if (result.proforma) {
+        await this.notifyProformaCreated(result.project, result.proforma, createdBy);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error in createWithBoth:', error);
+      throw error;
+    }
+  }
+
+  async createWithProforma(
+    createProjectDto: CreateProjectWithInvoiceDto,
+    createdBy: number,
+  ) {
+    try {
+      // Verify client exists if provided
+      if (createProjectDto.clientId) {
+        const client = await this.prisma.user.findUnique({
+          where: { id: createProjectDto.clientId },
+        });
+
+        if (!client) {
+          throw new NotFoundException(
+            `Client with ID ${createProjectDto.clientId} not found`,
+          );
+        }
+      }
+
+      // Verify assigned user exists if provided
+      if (createProjectDto.assignedToId) {
+        const assignedUser = await this.prisma.user.findUnique({
+          where: { id: createProjectDto.assignedToId },
+        });
+
+        if (!assignedUser) {
+          throw new NotFoundException(
+            `User with ID ${createProjectDto.assignedToId} not found`,
+          );
+        }
+      }
+
+      // Verify services exist if provided
+      if (createProjectDto.services) {
+        for (const serviceDto of createProjectDto.services) {
+          const service = await this.prisma.service.findUnique({
+            where: { id: serviceDto.serviceId },
+          });
+          if (!service) {
+            throw new NotFoundException(
+              `Service with ID ${serviceDto.serviceId} not found`,
+            );
+          }
+        }
+      }
+
+      // Verify products exist if provided
+      if (createProjectDto.products) {
+        for (const productDto of createProjectDto.products) {
+          const product = await this.prisma.product.findUnique({
+            where: { id: productDto.productId },
+          });
+          if (!product) {
+            throw new NotFoundException(
+              `Product with ID ${productDto.productId} not found`,
+            );
+          }
+        }
+      }
+
+      // Calculate estimated time in minutes if hours provided
+      let timeEstimated = createProjectDto.timeEstimated;
+      if (createProjectDto.estimatedHours && !timeEstimated) {
+        timeEstimated = createProjectDto.estimatedHours * 60;
+      }
+
+      // Create project with proforma only in transaction
+      const result = await this.prisma.$transaction(async (prisma) => {
+        // Create the project
+        const newProject = await prisma.project.create({
+          data: {
+            title: createProjectDto.title,
+            description: createProjectDto.description,
+            clientName: createProjectDto.clientName,
+            clientEmail: createProjectDto.clientEmail,
+            clientPhone: createProjectDto.clientPhone,
+            clientId: createProjectDto.clientId || null,
+            budgetId: createProjectDto.budgetId || null,
+            assignedToId: createProjectDto.assignedToId || null,
+            status: createProjectDto.status || 'PENDING',
+            priority: createProjectDto.priority || 'MEDIUM',
+            estimatedHours: createProjectDto.estimatedHours || null,
+            timeEstimated: timeEstimated || null,
+            progress: createProjectDto.progress || 0,
+            timeSpent: createProjectDto.timeSpent ?? 0,
+            actualHours: createProjectDto.actualHours ?? (createProjectDto.timeSpent ? Math.round(createProjectDto.timeSpent / 60) : null),
+            lastActivityAt: createProjectDto.lastActivityAt ? new Date(createProjectDto.lastActivityAt) : new Date(),
+            startedAt: createProjectDto.startedAt ? new Date(createProjectDto.startedAt) : null,
+            finishedAt: createProjectDto.finishedAt ? new Date(createProjectDto.finishedAt) : null,
+            deadline: createProjectDto.deadline ? new Date(createProjectDto.deadline) : null,
+            notes: createProjectDto.notes,
+            clientFeedback: createProjectDto.clientFeedback,
+            internalNotes: createProjectDto.internalNotes,
+            isPublic: createProjectDto.isPublic ?? true,
+            allowClientUpdates: createProjectDto.allowClientUpdates ?? false,
+            lastUpdatedBy: createdBy,
+          },
+          include: {
+            client: true,
+            assignedTo: true,
+            budget: true,
+          },
+        });
+
+        // Create project history entry
+        await prisma.projectHistory.create({
+          data: {
+            projectId: newProject.id,
+            action: 'PROJECT_CREATED',
+            details: JSON.stringify({
+              title: newProject.title,
+              clientName: newProject.clientName,
+              status: newProject.status,
+              priority: newProject.priority,
+            }),
+            createdBy: createdBy,
+          },
+        });
+
+        // Add services to project if provided
+        if (createProjectDto.services && createProjectDto.services.length > 0) {
+          for (const serviceDto of createProjectDto.services) {
+            await prisma.projectService.create({
+              data: {
+                projectId: newProject.id,
+                serviceId: serviceDto.serviceId,
+                quantity: serviceDto.quantity || 1,
+                unitPrice: serviceDto.unitPrice || null,
+                unitCost: serviceDto.unitCost || null,
+                discount: serviceDto.discount || 0,
+                status: serviceDto.status || 'PENDING',
+                startDate: serviceDto.startDate ? new Date(serviceDto.startDate) : null,
+                endDate: serviceDto.endDate ? new Date(serviceDto.endDate) : null,
+                assignedTo: serviceDto.assignedTo || null,
+                notes: serviceDto.notes,
+              },
+            });
+          }
+        }
+
+        // Add products to project if provided
+        if (createProjectDto.products && createProjectDto.products.length > 0) {
+          for (const productDto of createProjectDto.products) {
+            await prisma.projectProduct.create({
+              data: {
+                projectId: newProject.id,
+                productId: productDto.productId,
+                quantity: productDto.quantity || 1,
+                unitPrice: productDto.unitPrice || null,
+                unitCost: productDto.unitCost || null,
+                discount: productDto.discount || 0,
+                status: productDto.status || 'PENDING',
+                orderDate: productDto.orderDate ? new Date(productDto.orderDate) : null,
+                receivedDate: productDto.receivedDate ? new Date(productDto.receivedDate) : null,
+                installedDate: productDto.installedDate ? new Date(productDto.installedDate) : null,
+                notes: productDto.notes,
+              },
+            });
+          }
+        }
+
+        // Create milestones if provided
+        if (createProjectDto.milestones && createProjectDto.milestones.length > 0) {
+          for (const milestoneDto of createProjectDto.milestones) {
+            await prisma.projectMilestone.create({
+              data: {
+                projectId: newProject.id,
+                title: milestoneDto.title,
+                description: milestoneDto.description,
+                dueDate: milestoneDto.dueDate ? new Date(milestoneDto.dueDate) : null,
+                order: milestoneDto.order || 1,
+              },
+            });
+          }
+        }
+
+        // Create proforma only
+        let proforma = null;
+        if (createProjectDto.createEmptyProforma || 
+            (createProjectDto.services && createProjectDto.services.length > 0) || 
+            (createProjectDto.products && createProjectDto.products.length > 0)) {
+          
+          // Generate proforma number
+          const proformaCount = await prisma.proforma.count();
+          const proformaNumber = `PROF-${new Date().getFullYear()}-${String(proformaCount + 1).padStart(3, '0')}`;
+
+          // Calculate totals
+          let subtotal = 0;
+          const proformaItems = [];
+
+          // Add services to proforma
+          if (createProjectDto.services) {
+            for (const serviceDto of createProjectDto.services) {
+              const service = await prisma.service.findUnique({
+                where: { id: serviceDto.serviceId },
+              });
+              const unitPrice = serviceDto.unitPrice || service.price || 0;
+              const quantity = serviceDto.quantity || 1;
+              const itemTotal = unitPrice * quantity;
+              subtotal += itemTotal;
+
+              proformaItems.push({
+                serviceId: serviceDto.serviceId,
+                productId: null,
+                quantity: quantity,
+                unitPrice: unitPrice,
+                description: service.name,
+              });
+            }
+          }
+
+          // Add products to proforma
+          if (createProjectDto.products) {
+            for (const productDto of createProjectDto.products) {
+              const product = await prisma.product.findUnique({
+                where: { id: productDto.productId },
+              });
+              const unitPrice = productDto.unitPrice || product.sellingPrice || 0;
+              const quantity = productDto.quantity || 1;
+              const itemTotal = unitPrice * quantity;
+              subtotal += itemTotal;
+
+              proformaItems.push({
+                serviceId: null,
+                productId: productDto.productId,
+                quantity: quantity,
+                unitPrice: unitPrice,
+                description: product.name,
+              });
+            }
+          }
+
+          // Create proforma
+          proforma = await prisma.proforma.create({
+            data: {
+              proformaNumber: proformaNumber,
+              clientName: newProject.clientName || 'Client',
+              clientEmail: newProject.clientEmail || null,
+              clientPhone: newProject.clientPhone || null,
+              projectId: newProject.id,
+              subtotal: subtotal,
+              total: subtotal,
+              notes: createProjectDto.proformaNotes,
+              issuedAt: new Date(),
+              status: 'DRAFT',
+              currency: 'USD',
+              validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+            },
+          });
+
+          // Create proforma items
+          await Promise.all(
+            proformaItems.map((item) =>
+              prisma.proformaItem.create({
+                data: {
+                  proformaId: proforma.id,
+                  serviceId: item.serviceId || null,
+                  productId: item.productId || null,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  description: item.description,
+                  subtotal: item.quantity * item.unitPrice,
+                  totalAfterDiscount: item.quantity * item.unitPrice,
+                  total: item.quantity * item.unitPrice,
+                },
+              }),
+            ),
+          );
+        }
+
+        return {
+          project: newProject,
+          proforma,
+        };
+      });
+
+      // Send notifications outside transaction
+      await this.notifyProjectCreated(result.project, createdBy);
+      if (result.proforma) {
+        await this.notifyProformaCreated(result.project, result.proforma, createdBy);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error creating project with proforma:', error);
+      throw error;
+    }
   }
 
   async createWithoutInvoice(
     createProjectDto: CreateProjectWithoutInvoiceDto,
     createdBy: number,
   ) {
-    // Verify client exists
-    const client = await this.prisma.user.findUnique({
-      where: { id: createProjectDto.clientId },
-    });
+    // Verify client exists if provided
+    if (createProjectDto.clientId) {
+      const client = await this.prisma.user.findUnique({
+        where: { id: createProjectDto.clientId },
+      });
 
-    if (!client) {
-      throw new NotFoundException(
-        `Client with ID ${createProjectDto.clientId} not found`,
-      );
+      if (!client) {
+        throw new NotFoundException(
+          `Client with ID ${createProjectDto.clientId} not found`,
+        );
+      }
     }
 
     // Calculate estimated time in minutes if hours provided
@@ -566,17 +1388,20 @@ export class ProjectService {
           clientName: createProjectDto.clientName,
           clientEmail: createProjectDto.clientEmail,
           clientPhone: createProjectDto.clientPhone,
-          clientId: createProjectDto.clientId,
-          budgetId: createProjectDto.budgetId,
-          assignedToId: createProjectDto.assignedToId,
+          clientId: createProjectDto.clientId || null,
+          budgetId: createProjectDto.budgetId || null,
+          assignedToId: createProjectDto.assignedToId || null,
           status: createProjectDto.status || 'PENDING',
           priority: createProjectDto.priority || 'MEDIUM',
-          estimatedHours: createProjectDto.estimatedHours,
-          timeEstimated: timeEstimated,
+          estimatedHours: createProjectDto.estimatedHours || null,
+          timeEstimated: timeEstimated || null,
           progress: createProjectDto.progress || 0,
-          startedAt: createProjectDto.startedAt,
-          finishedAt: createProjectDto.finishedAt,
-          deadline: createProjectDto.deadline,
+          timeSpent: createProjectDto.timeSpent ?? 0,
+          actualHours: createProjectDto.actualHours ?? (createProjectDto.timeSpent ? Math.round(createProjectDto.timeSpent / 60) : null),
+          lastActivityAt: createProjectDto.lastActivityAt ? new Date(createProjectDto.lastActivityAt) : new Date(),
+          startedAt: createProjectDto.startedAt ? new Date(createProjectDto.startedAt) : null,
+          finishedAt: createProjectDto.finishedAt ? new Date(createProjectDto.finishedAt) : null,
+          deadline: createProjectDto.deadline ? new Date(createProjectDto.deadline) : null,
           notes: createProjectDto.notes,
           clientFeedback: createProjectDto.clientFeedback,
           internalNotes: createProjectDto.internalNotes,
@@ -1480,10 +2305,6 @@ export class ProjectService {
         where: { projectId: id },
       });
 
-      await prisma.proforma.deleteMany({
-        where: { projectId: id },
-      });
-
       await prisma.task.deleteMany({
         where: { projectId: id },
       });
@@ -1496,22 +2317,16 @@ export class ProjectService {
         where: { projectId: id },
       });
 
-      // Delete invoices related to this project
-      const projectInvoices = await prisma.invoice.findMany({
+      // Instead of deleting invoices and proformas, set their projectId to null
+      // This keeps the invoices and proformas but removes the project association
+      await prisma.invoice.updateMany({
         where: { projectId: id },
+        data: { projectId: null },
       });
 
-      for (const invoice of projectInvoices) {
-        await prisma.invoiceItem.deleteMany({
-          where: { invoiceId: invoice.id },
-        });
-        await prisma.payment.deleteMany({
-          where: { invoiceId: invoice.id },
-        });
-      }
-
-      await prisma.invoice.deleteMany({
+      await prisma.proforma.updateMany({
         where: { projectId: id },
+        data: { projectId: null },
       });
 
       // Finally delete the project
@@ -2107,8 +2922,8 @@ export class ProjectService {
     const invoice = await this.prisma.invoice.create({
       data: {
         clientName: project.clientName,
-        clientEmail: project.clientEmail,
-        clientPhone: project.clientPhone,
+        clientEmail: project.clientEmail || null,
+        clientPhone: project.clientPhone || null,
         projectId: projectId,
         subtotal: subtotal,
         total: subtotal,
@@ -2246,8 +3061,8 @@ export class ProjectService {
       data: {
         proformaNumber: proformaNumber.toString().padStart(6, '0'),
         clientName: project.clientName,
-        clientEmail: project.clientEmail,
-        clientPhone: project.clientPhone,
+        clientEmail: project.clientEmail || null,
+        clientPhone: project.clientPhone || null,
         projectId: projectId,
         subtotal: subtotal,
         total: subtotal,
@@ -2372,15 +3187,15 @@ export class ProjectService {
       where: { id: serviceId },
     });
 
-    if (service && service.cost) {
-      const totalCost = quantity * service.cost;
-      const totalProfit = soldService.totalRevenue - totalCost;
+    if (service && service.expense) {
+      const totalExpense = quantity * service.expense;
+      const totalProfit = soldService.totalRevenue - totalExpense;
 
-      // Update sold service with cost and profit
+      // Update sold service with expense and profit
       await this.prisma.soldService.update({
         where: { id: soldService.id },
         data: {
-          cost: service.cost,
+          cost: service.expense,
           totalProfit: totalProfit,
         },
       });
@@ -2580,7 +3395,7 @@ export class ProjectService {
 
     // Calculate costs from services
     project.services.forEach((projectService) => {
-      const unitCost = projectService.unitCost || projectService.service?.cost || 0;
+              const unitCost = projectService.unitCost || projectService.service?.expense || 0;
       const quantity = projectService.quantity || 1;
       totalCost += unitCost * quantity;
     });

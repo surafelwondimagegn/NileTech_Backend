@@ -3,29 +3,154 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
+import * as bodyParser from 'body-parser';
+import { HttpException, HttpStatus } from '@nestjs/common';
+
+// Global exception filter to ensure JSON responses
+class GlobalExceptionFilter {
+  catch(exception: any, host: any) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse();
+    const request = ctx.getRequest();
+
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let message = 'Internal server error';
+    let errorType = 'Error';
+
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+      
+      if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
+      } else if (typeof exceptionResponse === 'object') {
+        // Handle array of validation errors
+        if (Array.isArray(exceptionResponse['message'])) {
+          message = exceptionResponse['message'].join(', ');
+        } else {
+          message = exceptionResponse['message'] || exceptionResponse['error'] || message;
+        }
+      }
+      errorType = exception.constructor.name;
+    } else if (exception.status) {
+      status = exception.status;
+      message = exception.message || message;
+      errorType = exception.name || 'Error';
+    } else if (exception.code) {
+      // Handle Prisma errors
+      switch (exception.code) {
+        case 'P2002':
+          status = HttpStatus.CONFLICT;
+          message = 'A record with this information already exists';
+          errorType = 'ConflictException';
+          break;
+        case 'P2003':
+          status = HttpStatus.BAD_REQUEST;
+          message = 'Invalid reference data provided';
+          errorType = 'BadRequestException';
+          break;
+        case 'P2025':
+          status = HttpStatus.NOT_FOUND;
+          message = 'Record not found';
+          errorType = 'NotFoundException';
+          break;
+        default:
+          status = HttpStatus.BAD_REQUEST;
+          message = 'Database operation failed';
+          errorType = 'DatabaseError';
+      }
+    }
+
+    // Always return JSON response
+    response.status(status).json({
+      statusCode: status,
+      message: message,
+      error: errorType,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    });
+  }
+}
 
 async function bootstrap() {
   // Create NestJS application
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Security middleware
-  app.use(helmet());
+  // Apply global exception filter
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // Global request logging middleware
-  
-
-  // CORS configuration
+  // CORS configuration - Apply this first
   app.enableCors({
     origin: [
       'http://localhost:3000',
       'http://localhost:5173',
       'http://localhost:3001',
+      'https://1592326304f4.ngrok-free.app',
+      'https://aafddfedf32c.ngrok-free.app',
+      /\.ngrok-free\.app$/,
+      /\.ngrok\.io$/,
       process.env.CORS_ORIGIN,
     ].filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: [
+      'Content-Type', 
+      'Authorization', 
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+      'Access-Control-Request-Method',
+      'Access-Control-Request-Headers',
+      'ngrok-skip-browser-warning'
+    ],
+    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
+
+  // Security middleware
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
+  }));
+
+  // Increase payload size limit for file uploads
+  app.use(bodyParser.json({ limit: '50mb' }));
+  app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+
+  // Custom CORS middleware for additional handling
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    
+    // Allow ngrok domains
+    if (origin && (origin.includes('ngrok-free.app') || origin.includes('ngrok.io'))) {
+      res.header('Access-Control-Allow-Origin', origin);
+    } else {
+      res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
+    }
+    
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers, ngrok-skip-browser-warning');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+    } else {
+      next();
+    }
+  });
+
+  // Global request logging middleware
+  
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -33,11 +158,33 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+      skipMissingProperties: true,
+      skipNullProperties: true,
+      skipUndefinedProperties: true,
     }),
   );
 
   // Global prefix for all routes
   app.setGlobalPrefix('api/v1');
+
+  // Serve static files from uploads directory
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+    setHeaders: (res, path) => {
+      // Add CORS headers for static files
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      
+      // Set cache headers for images
+      if (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png') || path.endsWith('.gif')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year cache
+      }
+    },
+  });
 
   // Enhanced Swagger setup with alphabetical organization
   const config = new DocumentBuilder()

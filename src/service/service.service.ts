@@ -22,8 +22,18 @@ export class ServiceService {
       const nameExists = await this.checkNameExists(createServiceDto.name);
       if (nameExists) {
         throw new ConflictException(
-          `Service with name "${createServiceDto.name}" already exists`,
+          `Service with name "${createServiceDto.name}" already exists. Please choose a different name.`,
         );
+      }
+
+      // Check if service code already exists (if provided)
+      if (createServiceDto.serviceCode) {
+        const codeExists = await this.checkServiceCodeExists(createServiceDto.serviceCode);
+        if (codeExists) {
+          throw new ConflictException(
+            `Service with code "${createServiceDto.serviceCode}" already exists. Please choose a different code.`,
+          );
+        }
       }
 
       // Generate a unique service code if not provided
@@ -61,29 +71,37 @@ export class ServiceService {
 
       return service;
     } catch (error) {
+      // If it's already a ConflictException, re-throw it
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+
       if (error.code === 'P2002') {
         // Unique constraint violation
         if (error.meta?.target?.includes('serviceCode')) {
           throw new ConflictException(
-            `Service with code "${createServiceDto.serviceCode}" already exists`,
+            `Service with code "${createServiceDto.serviceCode}" already exists. Please choose a different code.`,
           );
         }
         if (error.meta?.target?.includes('name')) {
           throw new ConflictException(
-            `Service with name "${createServiceDto.name}" already exists`,
+            `Service with name "${createServiceDto.name}" already exists. Please choose a different name.`,
           );
         }
         throw new ConflictException(
-          'Service with this information already exists',
+          'Service with this information already exists. Please check your input and try again.',
         );
       }
 
       if (error.code === 'P2003') {
         // Foreign key constraint violation
         if (error.meta?.fieldName?.includes('categoryId')) {
-          throw new BadRequestException('Invalid category ID provided');
+          throw new BadRequestException('Invalid category ID provided. Please select a valid category.');
         }
-        throw new BadRequestException('Invalid reference data provided');
+        if (error.meta?.fieldName?.includes('taxId')) {
+          throw new BadRequestException('Invalid tax ID provided. Please select a valid tax rate.');
+        }
+        throw new BadRequestException('Invalid reference data provided. Please check your input.');
       }
 
       console.error('Unexpected error in service creation:', error);

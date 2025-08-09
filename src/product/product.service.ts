@@ -8,12 +8,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { NotificationService } from '../notification/notification.service';
+import { BudgetHistoryService } from '../budget-history/budget-history.service';
 
 @Injectable()
 export class ProductService {
   constructor(
     private prisma: PrismaService,
     private notificationService: NotificationService,
+    private budgetHistoryService: BudgetHistoryService,
   ) {}
 
   async create(createProductDto: CreateProductDto) {
@@ -57,9 +59,12 @@ export class ProductService {
         }
       }
 
-      // If budgetId is provided, check if budget exists and has sufficient funds
+      // Comprehensive budget management for product creation
+      let budget = null;
+      let budgetHistoryData = null;
+      
       if (createProductDto.budgetId) {
-        const budget = await this.prisma.budget.findUnique({
+        budget = await this.prisma.budget.findUnique({
           where: { id: createProductDto.budgetId },
         });
 
@@ -71,11 +76,29 @@ export class ProductService {
 
         const totalCost =
           createProductDto.buyingPrice * (createProductDto.stock || 0);
+        
         if (budget.amount < totalCost) {
           throw new BadRequestException(
             `Insufficient budget. Required: ${totalCost}, Available: ${budget.amount}`,
           );
         }
+
+        // Prepare budget history data
+        budgetHistoryData = {
+          budgetId: createProductDto.budgetId,
+          action: 'PRODUCT_CREATED',
+          oldValue: JSON.stringify({
+            amount: budget.amount,
+            description: `Budget before product creation: ${budget.name}`,
+          }),
+          newValue: JSON.stringify({
+            amount: budget.amount - totalCost,
+            productName: createProductDto.name,
+            productCost: totalCost,
+            description: `Budget deducted for product: ${createProductDto.name}`,
+          }),
+          changedBy: 1, // TODO: Get from JWT token
+        };
 
         // Deduct the cost from budget
         await this.prisma.budget.update({
@@ -115,8 +138,6 @@ export class ProductService {
         quality,
         condition,
         warranty,
-        supplierName,
-        supplierContact,
         minStockLevel,
         maxStockLevel,
         location,
@@ -125,6 +146,9 @@ export class ProductService {
         taxId,
         isActive,
       } = createProductDto;
+
+      // Use uploaded image path if provided
+      const imageUrl = image || null;
 
       const product = await this.prisma.product.create({
         data: {
@@ -135,7 +159,7 @@ export class ProductService {
           buyingPrice,
           sellingPrice,
           stock,
-          image,
+          image: imageUrl,
           sku: undefined, // Will be set after creation
           weight,
           brand,
@@ -143,8 +167,6 @@ export class ProductService {
           quality: quality || 'BRAND_NEW',
           condition,
           warranty,
-          supplierName,
-          supplierContact,
           minStockLevel,
           maxStockLevel,
           location,
@@ -185,6 +207,11 @@ export class ProductService {
         data: { sku: generatedSku },
       });
       product.sku = generatedSku;
+
+      // Track budget history if budget was used
+      if (budgetHistoryData) {
+        await this.budgetHistoryService.createHistoryEntry(budgetHistoryData);
+      }
 
       // Send notification
       await this.notificationService.notifyProductCreated(
@@ -379,16 +406,249 @@ export class ProductService {
         }
       }
 
-      // Validate budget exists if provided
-      if (updateProductDto.budgetId) {
-        const budget = await this.prisma.budget.findUnique({
+      // Comprehensive budget management for product updates
+      let budget = null;
+      let budgetHistoryData = null;
+      let budgetChanges = null;
+
+      // Handle budget assignment/change
+      if (updateProductDto.budgetId !== undefined) {
+        budget = await this.prisma.budget.findUnique({
           where: { id: updateProductDto.budgetId },
         });
+        
         if (!budget) {
           throw new NotFoundException(
             `Budget with ID ${updateProductDto.budgetId} not found`,
           );
         }
+
+        // If product is being assigned to a budget for the first time
+        if (!existingProduct.budgetId && updateProductDto.budgetId) {
+          const totalCost = existingProduct.buyingPrice * existingProduct.stock;
+          
+          if (budget.amount < totalCost) {
+            throw new BadRequestException(
+              `Insufficient budget for existing product. Required: ${totalCost}, Available: ${budget.amount}`,
+            );
+          }
+
+          budgetChanges = {
+            action: 'BUDGET_ASSIGNED',
+            oldValue: JSON.stringify({
+              amount: budget.amount,
+              description: `Budget before assigning product: ${budget.name}`,
+            }),
+            newValue: JSON.stringify({
+              amount: budget.amount - totalCost,
+              productName: existingProduct.name,
+              productCost: totalCost,
+              description: `Budget assigned to existing product: ${existingProduct.name}`,
+            }),
+          };
+
+          // Deduct the cost from budget
+          await this.prisma.budget.update({
+            where: { id: updateProductDto.budgetId },
+            data: { amount: budget.amount - totalCost },
+          });
+        }
+        // If product is changing budgets
+        else if (existingProduct.budgetId && existingProduct.budgetId !== updateProductDto.budgetId) {
+          // Return funds to old budget
+          const oldBudget = await this.prisma.budget.findUnique({
+            where: { id: existingProduct.budgetId },
+          });
+          
+          if (oldBudget) {
+            const returnedAmount = existingProduct.buyingPrice * existingProduct.stock;
+            await this.prisma.budget.update({
+              where: { id: existingProduct.budgetId },
+              data: { amount: oldBudget.amount + returnedAmount },
+            });
+          }
+
+          // Check new budget capacity
+          const totalCost = existingProduct.buyingPrice * existingProduct.stock;
+          if (budget.amount < totalCost) {
+            throw new BadRequestException(
+              `Insufficient budget in new budget. Required: ${totalCost}, Available: ${budget.amount}`,
+            );
+          }
+
+          budgetChanges = {
+            action: 'BUDGET_CHANGED',
+            oldValue: JSON.stringify({
+              oldBudgetId: existingProduct.budgetId,
+              oldBudgetAmount: oldBudget?.amount || 0,
+              newBudgetId: updateProductDto.budgetId,
+              newBudgetAmount: budget.amount,
+              description: `Budget change for product: ${existingProduct.name}`,
+            }),
+            newValue: JSON.stringify({
+              oldBudgetId: existingProduct.budgetId,
+              oldBudgetAmount: (oldBudget?.amount || 0) + (existingProduct.buyingPrice * existingProduct.stock),
+              newBudgetId: updateProductDto.budgetId,
+              newBudgetAmount: budget.amount - totalCost,
+              productName: existingProduct.name,
+              productCost: totalCost,
+              description: `Budget changed for product: ${existingProduct.name}`,
+            }),
+          };
+
+          // Deduct from new budget
+          await this.prisma.budget.update({
+            where: { id: updateProductDto.budgetId },
+            data: { amount: budget.amount - totalCost },
+          });
+        }
+      }
+
+      // Handle stock changes with budget validation
+      if (updateProductDto.stock !== undefined && existingProduct.budgetId) {
+        const stockDifference = updateProductDto.stock - existingProduct.stock;
+        const costDifference = stockDifference * existingProduct.buyingPrice;
+        
+        if (stockDifference > 0) { // Stock increase
+          const currentBudget = await this.prisma.budget.findUnique({
+            where: { id: existingProduct.budgetId },
+          });
+          
+          if (currentBudget && currentBudget.amount < costDifference) {
+            throw new BadRequestException(
+              `Insufficient budget for stock increase. Required: ${costDifference}, Available: ${currentBudget.amount}`,
+            );
+          }
+
+          if (currentBudget) {
+            budgetChanges = {
+              action: 'STOCK_INCREASED',
+              oldValue: JSON.stringify({
+                amount: currentBudget.amount,
+                oldStock: existingProduct.stock,
+                description: `Budget before stock increase: ${currentBudget.name}`,
+              }),
+              newValue: JSON.stringify({
+                amount: currentBudget.amount - costDifference,
+                newStock: updateProductDto.stock,
+                costDifference: costDifference,
+                description: `Budget deducted for stock increase: ${existingProduct.name}`,
+              }),
+            };
+
+            await this.prisma.budget.update({
+              where: { id: existingProduct.budgetId },
+              data: { amount: currentBudget.amount - costDifference },
+            });
+          }
+        } else if (stockDifference < 0) { // Stock decrease
+          const currentBudget = await this.prisma.budget.findUnique({
+            where: { id: existingProduct.budgetId },
+          });
+          
+          if (currentBudget) {
+            const returnedAmount = Math.abs(costDifference);
+            
+            budgetChanges = {
+              action: 'STOCK_DECREASED',
+              oldValue: JSON.stringify({
+                amount: currentBudget.amount,
+                oldStock: existingProduct.stock,
+                description: `Budget before stock decrease: ${currentBudget.name}`,
+              }),
+              newValue: JSON.stringify({
+                amount: currentBudget.amount + returnedAmount,
+                newStock: updateProductDto.stock,
+                returnedAmount: returnedAmount,
+                description: `Budget returned for stock decrease: ${existingProduct.name}`,
+              }),
+            };
+
+            await this.prisma.budget.update({
+              where: { id: existingProduct.budgetId },
+              data: { amount: currentBudget.amount + returnedAmount },
+            });
+          }
+        }
+      }
+
+      // Handle buying price changes with budget validation
+      if (updateProductDto.buyingPrice !== undefined && existingProduct.budgetId) {
+        const priceDifference = updateProductDto.buyingPrice - existingProduct.buyingPrice;
+        const costDifference = priceDifference * existingProduct.stock;
+        
+        if (costDifference > 0) { // Price increase
+          const currentBudget = await this.prisma.budget.findUnique({
+            where: { id: existingProduct.budgetId },
+          });
+          
+          if (currentBudget && currentBudget.amount < costDifference) {
+            throw new BadRequestException(
+              `Insufficient budget for price increase. Required: ${costDifference}, Available: ${currentBudget.amount}`,
+            );
+          }
+
+          if (currentBudget) {
+            budgetChanges = {
+              action: 'PRICE_INCREASED',
+              oldValue: JSON.stringify({
+                amount: currentBudget.amount,
+                oldPrice: existingProduct.buyingPrice,
+                description: `Budget before price increase: ${currentBudget.name}`,
+              }),
+              newValue: JSON.stringify({
+                amount: currentBudget.amount - costDifference,
+                newPrice: updateProductDto.buyingPrice,
+                costDifference: costDifference,
+                description: `Budget deducted for price increase: ${existingProduct.name}`,
+              }),
+            };
+
+            await this.prisma.budget.update({
+              where: { id: existingProduct.budgetId },
+              data: { amount: currentBudget.amount - costDifference },
+            });
+          }
+        } else if (costDifference < 0) { // Price decrease
+          const currentBudget = await this.prisma.budget.findUnique({
+            where: { id: existingProduct.budgetId },
+          });
+          
+          if (currentBudget) {
+            const returnedAmount = Math.abs(costDifference);
+            
+            budgetChanges = {
+              action: 'PRICE_DECREASED',
+              oldValue: JSON.stringify({
+                amount: currentBudget.amount,
+                oldPrice: existingProduct.buyingPrice,
+                description: `Budget before price decrease: ${currentBudget.name}`,
+              }),
+              newValue: JSON.stringify({
+                amount: currentBudget.amount + returnedAmount,
+                newPrice: updateProductDto.buyingPrice,
+                returnedAmount: returnedAmount,
+                description: `Budget returned for price decrease: ${existingProduct.name}`,
+              }),
+            };
+
+            await this.prisma.budget.update({
+              where: { id: existingProduct.budgetId },
+              data: { amount: currentBudget.amount + returnedAmount },
+            });
+          }
+        }
+      }
+
+      // Prepare budget history data if changes occurred
+      if (budgetChanges) {
+        budgetHistoryData = {
+          budgetId: existingProduct.budgetId || updateProductDto.budgetId,
+          action: budgetChanges.action,
+          oldValue: budgetChanges.oldValue,
+          newValue: budgetChanges.newValue,
+          changedBy: 1, // TODO: Get from JWT token
+        };
       }
 
       // Validate that selling price is greater than buying price
@@ -419,9 +679,13 @@ export class ProductService {
         }
       }
 
+      // Keep uploaded image path as is
+      const updateData = { ...updateProductDto };
+
+
       const product = await this.prisma.product.update({
         where: { id },
-        data: updateProductDto,
+        data: updateData,
         include: {
           category: {
             select: {
@@ -438,6 +702,11 @@ export class ProductService {
           },
         },
       });
+
+      // Track budget history if budget changes occurred
+      if (budgetHistoryData) {
+        await this.budgetHistoryService.createHistoryEntry(budgetHistoryData);
+      }
 
       // Detect changes and send notification
       const changes = this.detectProductChanges(
@@ -501,9 +770,50 @@ export class ProductService {
       // Check if product exists
       const existingProduct = await this.findOne(id);
 
+      // Handle budget refund if product has a budget
+      let budgetHistoryData = null;
+      
+      if (existingProduct.budgetId) {
+        const budget = await this.prisma.budget.findUnique({
+          where: { id: existingProduct.budgetId },
+        });
+        
+        if (budget) {
+          const refundAmount = existingProduct.buyingPrice * existingProduct.stock;
+          
+          // Prepare budget history data
+          budgetHistoryData = {
+            budgetId: existingProduct.budgetId,
+            action: 'PRODUCT_DELETED',
+            oldValue: JSON.stringify({
+              amount: budget.amount,
+              description: `Budget before product deletion: ${budget.name}`,
+            }),
+            newValue: JSON.stringify({
+              amount: budget.amount + refundAmount,
+              productName: existingProduct.name,
+              refundAmount: refundAmount,
+              description: `Budget refunded for deleted product: ${existingProduct.name}`,
+            }),
+            changedBy: 1, // TODO: Get from JWT token
+          };
+
+          // Refund the cost to budget
+          await this.prisma.budget.update({
+            where: { id: existingProduct.budgetId },
+            data: { amount: budget.amount + refundAmount },
+          });
+        }
+      }
+
       const product = await this.prisma.product.delete({
         where: { id },
       });
+
+      // Track budget history if budget was refunded
+      if (budgetHistoryData) {
+        await this.budgetHistoryService.createHistoryEntry(budgetHistoryData);
+      }
 
       // Send notification
       await this.notificationService.notifyProductDeleted(existingProduct.name);
@@ -604,6 +914,97 @@ export class ProductService {
     }
   }
 
+  async getProductsByBudget(budgetId: number) {
+    try {
+      return await this.prisma.product.findMany({
+        where: { budgetId },
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+          budget: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+    } catch (error) {
+      console.error('Unexpected error in getProductsByBudget:', error);
+      throw new BadRequestException(
+        'Failed to retrieve products by budget. Please try again.',
+      );
+    }
+  }
+
+  async getProductStats() {
+    try {
+      const [
+        total,
+        active,
+        inactive,
+        inStock,
+        lowStock,
+        outOfStock,
+        totalValue,
+        averagePrice
+      ] = await Promise.all([
+        this.prisma.product.count(),
+        this.prisma.product.count({ where: { isActive: true } }),
+        this.prisma.product.count({ where: { isActive: false } }),
+        this.prisma.product.count({ where: { stock: { gt: 10 } } }),
+        this.prisma.product.count({ where: { stock: { lte: 10, gt: 0 } } }),
+        this.prisma.product.count({ where: { stock: 0 } }),
+        this.prisma.product.aggregate({
+          _sum: {
+            stock: true,
+            buyingPrice: true,
+          },
+        }),
+        this.prisma.product.aggregate({
+          _avg: {
+            sellingPrice: true,
+          },
+        }),
+      ]);
+
+      const totalValueResult = totalValue._sum.stock && totalValue._sum.buyingPrice 
+        ? totalValue._sum.stock * totalValue._sum.buyingPrice 
+        : 0;
+
+      return {
+        total,
+        active,
+        inactive,
+        inStock,
+        lowStock,
+        outOfStock,
+        totalValue: totalValueResult,
+        averagePrice: averagePrice._avg.sellingPrice || 0,
+      };
+    } catch (error) {
+      console.error('Unexpected error in getProductStats:', error);
+      throw new BadRequestException(
+        'Failed to retrieve product statistics. Please try again.',
+      );
+    }
+  }
+
   async checkNameExists(name: string, excludeId?: number): Promise<boolean> {
     try {
       const whereClause: any = { name };
@@ -663,5 +1064,43 @@ export class ProductService {
     }
 
     return changes;
+  }
+
+  // Helper method to calculate product cost
+  private calculateProductCost(buyingPrice: number, stock: number): number {
+    return buyingPrice * stock;
+  }
+
+  // Helper method to validate budget availability
+  private async validateBudgetAvailability(
+    budgetId: number,
+    requiredAmount: number,
+  ): Promise<{ budget: any; isAvailable: boolean }> {
+    const budget = await this.prisma.budget.findUnique({
+      where: { id: budgetId },
+    });
+
+    if (!budget) {
+      throw new NotFoundException(`Budget with ID ${budgetId} not found`);
+    }
+
+    return {
+      budget,
+      isAvailable: budget.amount >= requiredAmount,
+    };
+  }
+
+  // Helper method to create budget history entry
+  private async createBudgetHistoryEntry(data: {
+    budgetId: number;
+    action: string;
+    oldValue: string;
+    newValue: string;
+    changedBy?: number;
+  }) {
+    return this.budgetHistoryService.createHistoryEntry({
+      ...data,
+      changedBy: data.changedBy || 1, // TODO: Get from JWT token
+    });
   }
 }
