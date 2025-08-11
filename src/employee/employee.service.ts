@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 export interface EmployeeWithProfile {
   id: number;
   name: string;
+  username: string;
   email: string;
   role: string;
   isActive: boolean;
@@ -30,9 +31,9 @@ export interface EmployeeWithProfile {
     city: string | null;
     state: string | null;
     country: string | null;
-    timezone: string;
-    language: string;
-    currency: string;
+    timezone: string | null;
+    language: string | null;
+    currency: string | null;
     lastLoginAt: string | null;
     lastActiveAt: string | null;
     loginCount: number;
@@ -255,7 +256,16 @@ export class EmployeeService {
     ]);
 
     return {
-      data: users as EmployeeWithProfile[],
+      data: users.map(user => ({
+        ...user,
+        createdAt: user.createdAt.toISOString(),
+        profile: user.profile ? {
+          ...user.profile,
+          hireDate: user.profile.hireDate?.toISOString() || null,
+          lastLoginAt: user.profile.lastLoginAt?.toISOString() || null,
+          lastActiveAt: user.profile.lastActiveAt?.toISOString() || null,
+        } : null,
+      })) as EmployeeWithProfile[],
       meta: {
         total,
         page,
@@ -302,7 +312,16 @@ export class EmployeeService {
       throw new NotFoundException(`Employee with ID ${id} not found`);
     }
 
-    return user as EmployeeWithProfile;
+    return {
+      ...user,
+      createdAt: user.createdAt.toISOString(),
+      profile: user.profile ? {
+        ...user.profile,
+        hireDate: user.profile.hireDate?.toISOString() || null,
+        lastLoginAt: user.profile.lastLoginAt?.toISOString() || null,
+        lastActiveAt: user.profile.lastActiveAt?.toISOString() || null,
+      } : null,
+    } as EmployeeWithProfile;
   }
 
   async updateEmployee(id: number, updateData: {
@@ -376,7 +395,7 @@ export class EmployeeService {
     if (updateData.profile) {
       updatedProfile = await this.prisma.profile.update({
         where: { userId: id },
-        data: {
+                                                                data: {
           ...(updateData.profile.jobTitle && { jobTitle: updateData.profile.jobTitle }),
           ...(updateData.profile.company && { company: updateData.profile.company }),
           ...(updateData.profile.department && { department: updateData.profile.department }),
@@ -418,9 +437,9 @@ export class EmployeeService {
         city: updatedProfile.city,
         state: updatedProfile.state,
         country: updatedProfile.country,
-        timezone: updatedProfile.timezone,
-        language: updatedProfile.language,
-        currency: updatedProfile.currency,
+        timezone: updatedProfile.timezone || null,
+        language: updatedProfile.language || null,
+        currency: updatedProfile.currency || null,
         lastLoginAt: updatedProfile.lastLoginAt?.toISOString() || null,
         lastActiveAt: updatedProfile.lastActiveAt?.toISOString() || null,
         loginCount: updatedProfile.loginCount,

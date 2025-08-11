@@ -30,6 +30,8 @@ interface AuthenticatedSocket extends Socket {
       'http://localhost:3000',
       'http://localhost:5173',
       'http://localhost:3001',
+      'https://niletech-five.vercel.app',
+      'https://niletech-rlrkcwyra-surafellls-projects.vercel.app',
     ],
     credentials: true,
   },

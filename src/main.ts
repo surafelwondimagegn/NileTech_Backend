@@ -87,12 +87,14 @@ async function bootstrap() {
       'http://localhost:3000',
       'http://localhost:5173',
       'http://localhost:3001',
+      'https://niletech-five.vercel.app',
+      'https://niletech-rlrkcwyra-surafellls-projects.vercel.app',
       'https://1592326304f4.ngrok-free.app',
       'https://aafddfedf32c.ngrok-free.app',
       /\.ngrok-free\.app$/,
       /\.ngrok\.io$/,
-      process.env.CORS_ORIGIN,
-    ].filter(Boolean),
+      ...(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : []),
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
@@ -131,8 +133,19 @@ async function bootstrap() {
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     
-    // Allow ngrok domains
-    if (origin && (origin.includes('ngrok-free.app') || origin.includes('ngrok.io'))) {
+    // Allow ngrok domains and production domains
+    if (origin && (
+      origin.includes('ngrok-free.app') || 
+      origin.includes('ngrok.io') ||
+      origin.includes('niletech-five.vercel.app') ||
+      origin.includes('niletech-rlrkcwyra-surafellls-projects.vercel.app')
+    )) {
+      res.header('Access-Control-Allow-Origin', origin);
+    } else if (origin && (
+      origin === 'http://localhost:3000' ||
+      origin === 'http://localhost:5173' ||
+      origin === 'http://localhost:3001'
+    )) {
       res.header('Access-Control-Allow-Origin', origin);
     } else {
       res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
@@ -701,7 +714,7 @@ Our API is organized into the following categories:
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔒 Security: Helmet enabled`);
   console.log(
-    `🌍 CORS: Enabled for http://localhost:3000, http://localhost:5173, http://localhost:3001`,
+    `🌍 CORS: Enabled for localhost, ngrok domains, and production domains (niletech-five.vercel.app)`,
   );
   console.log('='.repeat(60));
   console.log('\n🎯 Server is ready to handle requests!\n');

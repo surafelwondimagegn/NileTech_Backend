@@ -202,7 +202,7 @@ export class ProductController {
         bodyKeys: Object.keys(createProductDto || {}),
         contentType: request?.headers['content-type'],
         rawBody: request?.body,
-        bodyKeys: request?.body ? Object.keys(request.body) : [],
+        requestBodyKeys: request?.body ? Object.keys(request.body) : [],
         bodyValues: request?.body ? Object.values(request.body) : [],
         validationErrors: null, // Will be populated if validation fails
       });

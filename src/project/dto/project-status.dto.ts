@@ -112,6 +112,7 @@ export class ProjectStatusResponseDto {
   @ApiProperty({
     description: 'Updated project object',
     type: 'object',
+    additionalProperties: false,
   })
   project?: any;
 

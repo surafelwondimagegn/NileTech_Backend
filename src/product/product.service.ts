@@ -60,8 +60,8 @@ export class ProductService {
       }
 
       // Comprehensive budget management for product creation
-      let budget = null;
-      let budgetHistoryData = null;
+      let budget: any = null;
+      let budgetHistoryData: any = null;
       
       if (createProductDto.budgetId) {
         budget = await this.prisma.budget.findUnique({
@@ -407,9 +407,9 @@ export class ProductService {
       }
 
       // Comprehensive budget management for product updates
-      let budget = null;
-      let budgetHistoryData = null;
-      let budgetChanges = null;
+      let budget: any = null;
+      let budgetHistoryData: any = null;
+      let budgetChanges: any = null;
 
       // Handle budget assignment/change
       if (updateProductDto.budgetId !== undefined) {
@@ -445,7 +445,7 @@ export class ProductService {
               productCost: totalCost,
               description: `Budget assigned to existing product: ${existingProduct.name}`,
             }),
-          };
+          } as any;
 
           // Deduct the cost from budget
           await this.prisma.budget.update({
@@ -494,7 +494,7 @@ export class ProductService {
               productCost: totalCost,
               description: `Budget changed for product: ${existingProduct.name}`,
             }),
-          };
+          } as any;
 
           // Deduct from new budget
           await this.prisma.budget.update({
@@ -534,7 +534,7 @@ export class ProductService {
                 costDifference: costDifference,
                 description: `Budget deducted for stock increase: ${existingProduct.name}`,
               }),
-            };
+            } as any;
 
             await this.prisma.budget.update({
               where: { id: existingProduct.budgetId },
@@ -562,7 +562,7 @@ export class ProductService {
                 returnedAmount: returnedAmount,
                 description: `Budget returned for stock decrease: ${existingProduct.name}`,
               }),
-            };
+            } as any;
 
             await this.prisma.budget.update({
               where: { id: existingProduct.budgetId },
@@ -602,7 +602,7 @@ export class ProductService {
                 costDifference: costDifference,
                 description: `Budget deducted for price increase: ${existingProduct.name}`,
               }),
-            };
+            } as any;
 
             await this.prisma.budget.update({
               where: { id: existingProduct.budgetId },
@@ -630,7 +630,7 @@ export class ProductService {
                 returnedAmount: returnedAmount,
                 description: `Budget returned for price decrease: ${existingProduct.name}`,
               }),
-            };
+            } as any;
 
             await this.prisma.budget.update({
               where: { id: existingProduct.budgetId },
@@ -648,7 +648,7 @@ export class ProductService {
           oldValue: budgetChanges.oldValue,
           newValue: budgetChanges.newValue,
           changedBy: 1, // TODO: Get from JWT token
-        };
+        } as any;
       }
 
       // Validate that selling price is greater than buying price
@@ -771,7 +771,7 @@ export class ProductService {
       const existingProduct = await this.findOne(id);
 
       // Handle budget refund if product has a budget
-      let budgetHistoryData = null;
+      let budgetHistoryData: any = null;
       
       if (existingProduct.budgetId) {
         const budget = await this.prisma.budget.findUnique({

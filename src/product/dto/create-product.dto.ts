@@ -291,7 +291,7 @@ export class CreateProductDto {
   @IsBoolean()
   @Transform(({ value }) => {
     if (typeof value === 'string') {
-      return value === 'true' || value === '1' || value === true;
+      return value === 'true' || value === '1';
     }
     return value;
   })

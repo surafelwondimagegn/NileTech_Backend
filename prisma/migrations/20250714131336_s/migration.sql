@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE `Budget` ALTER COLUMN `name` DROP DEFAULT;

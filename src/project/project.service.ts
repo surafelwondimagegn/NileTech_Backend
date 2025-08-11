@@ -474,6 +474,7 @@ export class ProjectService {
     }
 
     // Create project with transaction
+    let createdInvoice: any = null;
     const result = await this.prisma.$transaction(async (prisma) => {
       // Create the project
       const newProject = await prisma.project.create({
@@ -599,7 +600,7 @@ export class ProjectService {
         const invoiceNumber = `INV-${String(invoiceCount + 1).padStart(6, '0')}`;
 
         // Create invoice
-        invoice = await prisma.invoice.create({
+        const createdInvoice = await prisma.invoice.create({
           data: {
             invoiceNumber: invoiceNumber,
             clientName: newProject.clientName || 'Client',
@@ -623,7 +624,7 @@ export class ProjectService {
           invoiceItems.map((item) =>
             prisma.invoiceItem.create({
               data: {
-                invoiceId: invoice.id,
+                invoiceId: createdInvoice.id,
                 serviceId: item.serviceId || null,
                 productId: item.productId || null,
                 quantity: item.quantity,
@@ -640,13 +641,13 @@ export class ProjectService {
 
       // Send notifications
       await this.notifyProjectCreated(newProject, createdBy);
-      if (invoice) {
-        await this.notifyInvoiceCreated(newProject, invoice, createdBy);
+      if (createdInvoice) {
+        await this.notifyInvoiceCreated(newProject, createdInvoice, createdBy);
       }
 
       return {
         project: newProject,
-        invoice,
+        invoice: createdInvoice,
       };
     });
 
@@ -898,7 +899,7 @@ export class ProjectService {
           const invoiceNumber = `INV-${String(invoiceCount + 1).padStart(6, '0')}`;
 
           // Create invoice
-          invoice = await prisma.invoice.create({
+          const createdInvoice2 = await prisma.invoice.create({
             data: {
               invoiceNumber: invoiceNumber,
               clientName: newProject.clientName || 'Client',
@@ -922,7 +923,7 @@ export class ProjectService {
             invoiceItems.map((item) =>
               prisma.invoiceItem.create({
                 data: {
-                  invoiceId: invoice.id,
+                  invoiceId: createdInvoice2.id,
                   serviceId: item.serviceId || null,
                   productId: item.productId || null,
                   quantity: item.quantity,
@@ -938,7 +939,7 @@ export class ProjectService {
         }
 
         // Create proforma
-        let proforma = null;
+        let createdProforma: any = null;
         if (createProjectDto.createEmptyProforma || (createProjectDto.services && createProjectDto.services.length > 0) || (createProjectDto.products && createProjectDto.products.length > 0)) {
           // Calculate proforma totals
           let subtotal = 0;
@@ -1007,7 +1008,7 @@ export class ProjectService {
           const proformaNumber = `PROF-${String(proformaCount + 1).padStart(6, '0')}`;
 
           // Create proforma
-          proforma = await prisma.proforma.create({
+          createdProforma = await prisma.proforma.create({
             data: {
               proformaNumber: proformaNumber,
               clientName: newProject.clientName || 'Client',
@@ -1029,7 +1030,7 @@ export class ProjectService {
             proformaItems.map((item) =>
               prisma.proformaItem.create({
                 data: {
-                  proformaId: proforma.id,
+                  proformaId: createdProforma.id,
                   serviceId: item.serviceId || null,
                   productId: item.productId || null,
                   quantity: item.quantity,
@@ -1047,7 +1048,7 @@ export class ProjectService {
         return {
           project: newProject,
           invoice,
-          proforma,
+          proforma: createdProforma,
         };
       });
 
@@ -1243,7 +1244,7 @@ export class ProjectService {
         }
 
         // Create proforma only
-        let proforma = null;
+        let proforma: any = null;
         if (createProjectDto.createEmptyProforma || 
             (createProjectDto.services && createProjectDto.services.length > 0) || 
             (createProjectDto.products && createProjectDto.products.length > 0)) {
@@ -1254,7 +1255,7 @@ export class ProjectService {
 
           // Calculate totals
           let subtotal = 0;
-          const proformaItems = [];
+          const proformaItems: any[] = [];
 
           // Add services to proforma
           if (createProjectDto.services) {
@@ -1262,6 +1263,11 @@ export class ProjectService {
               const service = await prisma.service.findUnique({
                 where: { id: serviceDto.serviceId },
               });
+              
+              if (!service) {
+                throw new NotFoundException(`Service with ID ${serviceDto.serviceId} not found`);
+              }
+              
               const unitPrice = serviceDto.unitPrice || service.price || 0;
               const quantity = serviceDto.quantity || 1;
               const itemTotal = unitPrice * quantity;
@@ -1283,6 +1289,11 @@ export class ProjectService {
               const product = await prisma.product.findUnique({
                 where: { id: productDto.productId },
               });
+              
+              if (!product) {
+                throw new NotFoundException(`Product with ID ${productDto.productId} not found`);
+              }
+              
               const unitPrice = productDto.unitPrice || product.sellingPrice || 0;
               const quantity = productDto.quantity || 1;
               const itemTotal = unitPrice * quantity;
@@ -1314,11 +1325,11 @@ export class ProjectService {
               currency: 'USD',
               validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
             },
-          });
+          }) as any;
 
           // Create proforma items
           await Promise.all(
-            proformaItems.map((item) =>
+            (proformaItems as any[]).map((item: any) =>
               prisma.proformaItem.create({
                 data: {
                   proformaId: proforma.id,
@@ -1408,7 +1419,6 @@ export class ProjectService {
           isPublic: createProjectDto.isPublic ?? true,
           allowClientUpdates: createProjectDto.allowClientUpdates ?? false,
           lastUpdatedBy: createdBy,
-          lastActivityAt: new Date(),
         },
       });
 
@@ -1452,7 +1462,7 @@ export class ProjectService {
                   name: service.serviceName,
                   description: service.serviceDescription,
                   price: service.unitPrice || 0,
-                  cost: service.unitCost || 0,
+                  expense: service.unitCost || 0,
                   isActive: true,
                 },
               });
@@ -2507,7 +2517,7 @@ export class ProjectService {
           projectService.serviceId,
           projectService.quantity,
           projectService.unitPrice || projectService.service.price,
-          projectWithItems.clientName,
+          projectWithItems.clientName || '',
           projectWithItems.clientEmail || undefined,
           projectWithItems.clientPhone || undefined,
           `Revenue from completed project: ${projectWithItems.title}`,
@@ -2529,7 +2539,7 @@ export class ProjectService {
           projectProduct.productId,
           projectProduct.quantity,
           projectProduct.unitPrice || projectProduct.product.sellingPrice,
-          projectWithItems.clientName,
+          projectWithItems.clientName || '',
           projectWithItems.clientEmail || undefined,
           projectWithItems.clientPhone || undefined,
           `Revenue from completed project: ${projectWithItems.title}`,
@@ -2666,7 +2676,7 @@ export class ProjectService {
           name: serviceDto.serviceName,
           description: serviceDto.serviceDescription,
           price: serviceDto.unitPrice || 0,
-          cost: serviceDto.unitCost || 0,
+          expense: serviceDto.unitCost || 0,
           isActive: true,
         },
       });
@@ -3060,7 +3070,7 @@ export class ProjectService {
     const proforma = await this.prisma.proforma.create({
       data: {
         proformaNumber: proformaNumber.toString().padStart(6, '0'),
-        clientName: project.clientName,
+        clientName: project.clientName || '',
         clientEmail: project.clientEmail || null,
         clientPhone: project.clientPhone || null,
         projectId: projectId,
@@ -3172,7 +3182,7 @@ export class ProjectService {
         serviceId: serviceId,
         quantity: quantity,
         sellingPrice: sellingPrice,
-        cost: 0, // Will be calculated from service cost
+        unitExpense: 0, // Will be calculated from service cost
         totalRevenue: quantity * sellingPrice,
         totalProfit: 0, // Will be calculated
         customerName: customerName,
@@ -3195,7 +3205,7 @@ export class ProjectService {
       await this.prisma.soldService.update({
         where: { id: soldService.id },
         data: {
-          cost: service.expense,
+          unitExpense: service.expense,
           totalProfit: totalProfit,
         },
       });

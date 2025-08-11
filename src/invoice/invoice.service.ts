@@ -329,7 +329,7 @@ export class InvoiceService {
     const response: InvoiceResponseDto = {
       id: created.id,
       invoiceNumber: created.invoiceNumber,
-      clientName: created.clientName,
+      clientName: created.clientName || '',
       clientEmail: created.clientEmail || undefined,
       clientPhone: created.clientPhone || undefined,
       clientAddress: created.clientAddress || undefined,
@@ -338,7 +338,7 @@ export class InvoiceService {
         ? {
             id: created.project.id,
             title: created.project.title,
-            clientName: created.project.clientName,
+            clientName: created.project.clientName || '',
             status: created.project.status,
           }
         : undefined,

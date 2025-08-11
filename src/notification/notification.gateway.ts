@@ -9,7 +9,19 @@ import { Server, Socket } from 'socket.io';
 import { NotificationService } from './notification.service';
 import { SendNotificationDto } from './dto/send-notification.dto';
 
-@WebSocketGateway({ namespace: '/notification', cors: true })
+@WebSocketGateway({ 
+  namespace: '/notification', 
+  cors: {
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:3001',
+      'https://niletech-five.vercel.app',
+      'https://niletech-rlrkcwyra-surafellls-projects.vercel.app',
+    ],
+    credentials: true,
+  }
+})
 export class NotificationGateway {
   @WebSocketServer()
   server: Server;

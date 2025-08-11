@@ -23,7 +23,7 @@ export class PayrollService {
         employeeId,
         amount,
         period,
-        type,
+        type: type || undefined,
         description,
         paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
       },
@@ -112,9 +112,10 @@ export class PayrollService {
       throw new NotFoundException(`Payroll with ID ${id} not found`);
     }
 
+    const { employeeId, ...updateData } = updatePayrollDto;
     return this.prisma.payroll.update({
       where: { id },
-      data: updatePayrollDto,
+      data: updateData,
       include: {
         employee: {
           select: {

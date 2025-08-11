@@ -22,7 +22,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { NotificationService } from './notification.service';
-import { CreateNotificationDto } from './dto/create-notification.dto';
+import { CreateNotificationDto, NotificationType } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -210,42 +210,42 @@ export class NotificationController {
         {
           userId: req.user.id,
           content: 'Welcome to NileTech! Your account has been successfully created.',
-          type: 'SUCCESS'
+          type: NotificationType.SUCCESS
         },
         {
           userId: req.user.id,
           content: 'New product "Premium Nail Polish" has been added to inventory.',
-          type: 'INFO'
+          type: NotificationType.INFO
         },
         {
           userId: req.user.id,
           content: 'Low stock alert: "Nail Files" has only 5 units remaining.',
-          type: 'WARNING'
+          type: NotificationType.WARNING
         },
         {
           userId: req.user.id,
           content: 'System maintenance scheduled for tomorrow at 2:00 AM.',
-          type: 'ALERT'
+          type: NotificationType.ALERT
         },
         {
           userId: req.user.id,
           content: 'Invoice #INV-001 has been paid successfully.',
-          type: 'SUCCESS'
+          type: NotificationType.SUCCESS
         },
         {
           userId: req.user.id,
           content: 'New project "Kitchen Renovation" has been assigned to you.',
-          type: 'INFO'
+          type: NotificationType.INFO
         },
         {
           userId: req.user.id,
           content: 'Payment received: $1,250 for Project #PRJ-2024-001',
-          type: 'SUCCESS'
+          type: NotificationType.SUCCESS
         },
         {
           userId: req.user.id,
           content: 'Budget "Marketing Expenses" is running low: $150 remaining.',
-          type: 'WARNING'
+          type: NotificationType.WARNING
         }
       ];
 
@@ -278,42 +278,42 @@ export class NotificationController {
         {
           userId: req.user.id,
           content: 'Welcome to NileTech! Your account has been successfully created.',
-          type: 'SUCCESS'
+          type: NotificationType.SUCCESS
         },
         {
           userId: req.user.id,
           content: 'New product "Premium Nail Polish" has been added to inventory.',
-          type: 'INFO'
+          type: NotificationType.INFO
         },
         {
           userId: req.user.id,
           content: 'Low stock alert: "Nail Files" has only 5 units remaining.',
-          type: 'WARNING'
+          type: NotificationType.WARNING
         },
         {
           userId: req.user.id,
           content: 'System maintenance scheduled for tomorrow at 2:00 AM.',
-          type: 'ALERT'
+          type: NotificationType.ALERT
         },
         {
           userId: req.user.id,
           content: 'Invoice #INV-001 has been paid successfully.',
-          type: 'SUCCESS'
+          type: NotificationType.SUCCESS
         },
         {
           userId: req.user.id,
           content: 'New project "Kitchen Renovation" has been assigned to you.',
-          type: 'INFO'
+          type: NotificationType.INFO
         },
         {
           userId: req.user.id,
           content: 'Payment received: $1,250 for Project #PRJ-2024-001',
-          type: 'SUCCESS'
+          type: NotificationType.SUCCESS
         },
         {
           userId: req.user.id,
           content: 'Budget "Marketing Expenses" is running low: $150 remaining.',
-          type: 'WARNING'
+          type: NotificationType.WARNING
         }
       ];
 
